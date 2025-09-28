@@ -3,7 +3,8 @@ import { getConfigByKey, setConfig } from '../config/service.js';
 // 登录方式枚举
 export enum LoginMethod {
   EMAIL = 'email',
-  SMS = 'sms'
+  SMS = 'sms',
+  BOTH = 'both'
 }
 
 // 登录配置接口
@@ -19,15 +20,21 @@ export interface LoginConfig {
 export async function getLoginConfig(): Promise<LoginConfig> {
   // 获取登录方式
   const methodConfig = await getConfigByKey('login_method');
-  const method = methodConfig?.value === LoginMethod.SMS ? LoginMethod.SMS : LoginMethod.EMAIL;
-  
-  // 如果是短信登录方式，获取阿里云配置
-  if (method === LoginMethod.SMS) {
+  let method = LoginMethod.EMAIL; // 默认为邮箱登录
+
+  if (methodConfig?.value === LoginMethod.SMS) {
+    method = LoginMethod.SMS;
+  } else if (methodConfig?.value === LoginMethod.BOTH) {
+    method = LoginMethod.BOTH;
+  }
+
+  // 如果是短信登录或两种都需要，获取阿里云配置
+  if (method === LoginMethod.SMS || method === LoginMethod.BOTH) {
     const accessKeyIdConfig = await getConfigByKey('aliyun_sms_access_key_id');
     const accessKeySecretConfig = await getConfigByKey('aliyun_sms_access_key_secret');
     const signNameConfig = await getConfigByKey('aliyun_sms_sign_name');
     const templateCodeConfig = await getConfigByKey('aliyun_sms_template_code');
-    
+
     return {
       method,
       aliCloudAccessKeyId: accessKeyIdConfig?.value,
@@ -36,7 +43,7 @@ export async function getLoginConfig(): Promise<LoginConfig> {
       aliCloudTemplateCode: templateCodeConfig?.value
     };
   }
-  
+
   return {
     method
   };
@@ -47,7 +54,7 @@ export async function setLoginMethod(method: LoginMethod): Promise<void> {
   await setConfig({
     key: 'login_method',
     value: method,
-    description: '登录方式配置 (email 或 sms)'
+    description: '登录方式配置 (email、sms 或 both)'
   });
 }
 

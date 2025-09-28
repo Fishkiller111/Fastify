@@ -59,12 +59,12 @@ async function up() {
     // 创建更新时间戳的触发器函数
     await client.query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
-      RETURNS TRIGGER AS $
+      RETURNS TRIGGER AS $$
       BEGIN
         NEW.updated_at = CURRENT_TIMESTAMP;
         RETURN NEW;
       END;
-      $ language 'plpgsql';
+      $$ language 'plpgsql';
     `);
     
     // 创建触发器

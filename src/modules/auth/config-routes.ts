@@ -30,7 +30,7 @@ async function loginConfigRoutes(fastify: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            method: { type: 'string', enum: ['email', 'sms'] },
+            method: { type: 'string', enum: ['email', 'sms', 'both'] },
             aliCloudAccessKeyId: { type: 'string' },
             aliCloudAccessKeySecret: { type: 'string' },
             aliCloudSignName: { type: 'string' },
@@ -66,7 +66,7 @@ async function loginConfigRoutes(fastify: FastifyInstance) {
         type: 'object',
         required: ['method'],
         properties: {
-          method: { type: 'string', enum: ['email', 'sms'] }
+          method: { type: 'string', enum: ['email', 'sms', 'both'] }
         }
       },
       response: {
@@ -98,15 +98,15 @@ async function loginConfigRoutes(fastify: FastifyInstance) {
       const { method } = request.body;
       
       // 验证登录方式
-      if (method !== LoginMethod.EMAIL && method !== LoginMethod.SMS) {
+      if (method !== LoginMethod.EMAIL && method !== LoginMethod.SMS && method !== LoginMethod.BOTH) {
         return reply.status(400).send({
           success: false,
           message: '无效的登录方式'
         });
       }
-      
-      // 如果设置为短信登录，检查阿里云配置是否完整
-      if (method === LoginMethod.SMS) {
+
+      // 如果设置为短信登录或两种都需要，检查阿里云配置是否完整
+      if (method === LoginMethod.SMS || method === LoginMethod.BOTH) {
         const isConfigValid = await validateAliyunSMSConfig();
         if (!isConfigValid) {
           return reply.status(400).send({

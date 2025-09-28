@@ -2,12 +2,15 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { RegisterRequest, LoginRequest, SMSRegisterRequest, SMSLoginRequest } from './types.js';
 import AuthService from './service.js';
 import { getLoginConfig, LoginMethod } from './login-config.js';
+import loginConfigRoutes from './config-routes.js';
 
 /**
  * 认证路由
  * @param fastify Fastify实例
  */
 async function authRoutes(fastify: FastifyInstance) {
+  // 注册登录配置路由
+  fastify.register(loginConfigRoutes);
   // 注册路由（邮箱方式）
   fastify.post('/register/email', {
     schema: {

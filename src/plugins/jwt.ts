@@ -9,10 +9,15 @@ declare module 'fastify' {
   }
 }
 
-// 扩展JWT用户类型
+// 定义JWT用户类型
 export interface JwtUser {
   userId: number;
   username: string;
+}
+
+// 扩展FastifyRequest类型以包含用户信息
+interface RequestWithUser extends FastifyRequest {
+  user: string | object | Buffer | JwtUser;
 }
 
 /**
@@ -21,21 +26,64 @@ export interface JwtUser {
  */
 async function jwtPlugin(fastify: FastifyInstance) {
   // 注册JWT插件
-  fastify.register(fastifyJwt, {
+  await fastify.register(fastifyJwt, {
     secret: config.jwt.secret,
+    sign: {
+      expiresIn: config.jwt.expiresIn
+    }
   });
 
-  // 等待插件注册完成
-  fastify.addHook('onReady', async () => {
-    console.log('JWT plugin registered successfully');
-  });
+  console.log('JWT plugin registered successfully');
 
   // 添加装饰器用于验证JWT
-  fastify.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
+  fastify.decorate('authenticate', async function (request: RequestWithUser, reply: FastifyReply) {
     try {
-      await request.jwtVerify();
-    } catch (err) {
-      reply.code(401).send({ 
+      console.log('=== JWT Authentication Started ===');
+      console.log('Authorization header:', request.headers.authorization);
+
+      // 检查Authorization头是否存在
+      if (!request.headers.authorization) {
+        console.error('No Authorization header found');
+        reply.code(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Missing authorization header'
+        });
+        return;
+      }
+
+      // 检查Bearer格式
+      if (!request.headers.authorization.startsWith('Bearer ')) {
+        console.error('Invalid authorization header format');
+        reply.code(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Invalid authorization header format'
+        });
+        return;
+      }
+
+      // 提取token
+      const token = request.headers.authorization.substring(7); // 移除 'Bearer ' 前缀
+      console.log('Extracted token:', token);
+
+      // 手动验证JWT token
+      const decoded = fastify.jwt.verify(token);
+      console.log('JWT token verified successfully. User:', decoded);
+
+      // 将用户信息附加到请求对象
+      request.user = decoded;
+
+      console.log('=== JWT Authentication Successful ===');
+      // request.user现在包含了JWT解码后的载荷
+    } catch (err: any) {
+      console.error('JWT verification failed:', err);
+      console.error('Error details:', {
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack
+      });
+      reply.code(401).send({
         statusCode: 401,
         error: 'Unauthorized',
         message: 'Invalid or missing token'
