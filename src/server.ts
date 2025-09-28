@@ -18,6 +18,15 @@ await app.register(import('@fastify/swagger'), {
       url: `http://${config.server.host}:${config.server.port}`,
       description: 'Development server'
     }],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT'
+        }
+      }
+    }
   },
 });
 

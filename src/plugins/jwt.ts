@@ -9,6 +9,12 @@ declare module 'fastify' {
   }
 }
 
+// 扩展JWT用户类型
+export interface JwtUser {
+  userId: number;
+  username: string;
+}
+
 /**
  * 注册JWT插件
  * @param fastify Fastify实例
@@ -29,7 +35,11 @@ async function jwtPlugin(fastify: FastifyInstance) {
     try {
       await request.jwtVerify();
     } catch (err) {
-      reply.send(err);
+      reply.code(401).send({ 
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Invalid or missing token'
+      });
     }
   });
 }
