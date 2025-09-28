@@ -26,6 +26,7 @@ class UserService {
         username: row.username,
         email: row.email,
         password: row.password,
+        phone_number: row.phone_number,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
@@ -57,6 +58,39 @@ class UserService {
         username: row.username,
         email: row.email,
         password: row.password,
+        phone_number: row.phone_number,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+      
+      return user;
+    } finally {
+      client.release();
+    }
+  }
+  
+  /**
+   * 根据手机号获取用户信息
+   * @param phoneNumber 用户手机号
+   * @returns 用户信息
+   */
+  async getUserByPhoneNumber(phoneNumber: string): Promise<User | null> {
+    const client = await pool.connect();
+    
+    try {
+      const result = await client.query('SELECT * FROM users WHERE phone_number = $1', [phoneNumber]);
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+      
+      const row = result.rows[0];
+      const user: User = {
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        password: row.password,
+        phone_number: row.phone_number,
         created_at: row.created_at,
         updated_at: row.updated_at
       };

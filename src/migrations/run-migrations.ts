@@ -1,10 +1,14 @@
-import { up as migrationUp } from './001-create-users-table';
+import { up as migrationUp1 } from './001-create-users-table.js';
+import { up as migrationUp2 } from './002-create-config-table.js';
+import { up as migrationUp3 } from './003-add-phone-number-to-users.js';
 
 // 运行所有待处理的迁移
 async function runMigrations() {
   try {
     console.log('开始运行数据库迁移...');
-    await migrationUp();
+    await migrationUp1();
+    await migrationUp2();
+    await migrationUp3();
     console.log('所有迁移已完成');
     process.exit(0);
   } catch (err: any) {

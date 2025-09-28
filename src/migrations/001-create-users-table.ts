@@ -1,5 +1,5 @@
 import { Pool, Client } from 'pg';
-import config from '../config';
+import config from '../config/index.js';
 
 // 创建用户表的迁移脚本
 async function up() {

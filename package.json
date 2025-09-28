@@ -6,6 +6,7 @@
     "migrate": "node dist/migrations/run-migrations.js"
   },
   "dependencies": {
+    "@alicloud/pop-core": "^1.8.0",
     "@fastify/jwt": "^10.0.0",
     "@fastify/swagger": "^9.5.2",
     "@fastify/swagger-ui": "^5.2.3",
