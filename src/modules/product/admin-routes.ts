@@ -4,7 +4,7 @@ import config from '../../config/index.js';
 import { ProductService } from './service.js';
 import { CreateProductRequest, UpdateProductRequest, ProductListQuery } from './types.js';
 
-export async function productRoutes(fastify: FastifyInstance) {
+export default async function adminProductRoutes(fastify: FastifyInstance) {
   const productService = new ProductService();
 
   // JWT验证中间件
@@ -30,122 +30,12 @@ export async function productRoutes(fastify: FastifyInstance) {
     }
   };
 
-  // 用户端接口 - 获取商品列表（无需鉴权）
-  fastify.get('/public', {
-    schema: {
-      description: '获取商品列表（用户端）',
-      tags: ['商品'],
-      querystring: {
-        type: 'object',
-        properties: {
-          page: { type: 'number', minimum: 1, default: 1 },
-          limit: { type: 'number', minimum: 1, maximum: 50, default: 10 },
-          category: { type: 'string' },
-          search: { type: 'string' },
-          sort: { type: 'string', enum: ['created_at', 'price', 'name'], default: 'created_at' },
-          order: { type: 'string', enum: ['asc', 'desc'], default: 'desc' }
-        }
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            data: {
-              type: 'object',
-              properties: {
-                products: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      id: { type: 'number' },
-                      name: { type: 'string' },
-                      description: { type: 'string' },
-                      price: { type: 'number' },
-                      stock: { type: 'number' },
-                      category: { type: 'string' },
-                      image_url: { type: 'string' },
-                      created_at: { type: 'string' }
-                    }
-                  }
-                },
-                pagination: {
-                  type: 'object',
-                  properties: {
-                    current_page: { type: 'number' },
-                    total_pages: { type: 'number' },
-                    total_count: { type: 'number' },
-                    per_page: { type: 'number' }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }, async (request: FastifyRequest<{ Querystring: ProductListQuery }>, reply) => {
-    try {
-      const query = { ...request.query, is_active: true };
-      const result = await productService.getProducts(query);
-
-      return reply.send({
-        success: true,
-        data: result
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        message: '获取商品列表失败'
-      });
-    }
-  });
-
-  // 用户端接口 - 获取单个商品详情（无需鉴权）
-  fastify.get('/public/:id', {
-    schema: {
-      description: '获取商品详情（用户端）',
-      tags: ['商品'],
-      params: {
-        type: 'object',
-        properties: {
-          id: { type: 'number' }
-        },
-        required: ['id']
-      }
-    }
-  }, async (request: FastifyRequest<{ Params: { id: number } }>, reply) => {
-    try {
-      const product = await productService.getProductById(request.params.id);
-
-      if (!product || !product.is_active) {
-        return reply.status(404).send({
-          success: false,
-          message: '商品不存在'
-        });
-      }
-
-      return reply.send({
-        success: true,
-        data: product
-      });
-    } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({
-        success: false,
-        message: '获取商品详情失败'
-      });
-    }
-  });
-
   // 管理端接口 - 获取商品列表（需要鉴权）
-  fastify.get('/admin', {
+  fastify.get('/', {
     preHandler: authenticate,
     schema: {
       description: '获取商品列表（管理端）',
-      tags: ['商品管理'],
+      tags: ['管理端-商品管理'],
       security: [{ bearerAuth: [] }],
       querystring: {
         type: 'object',
@@ -178,11 +68,11 @@ export async function productRoutes(fastify: FastifyInstance) {
   });
 
   // 管理端接口 - 创建商品（需要鉴权）
-  fastify.post('/admin', {
+  fastify.post('/', {
     preHandler: authenticate,
     schema: {
       description: '创建商品',
-      tags: ['商品管理'],
+      tags: ['管理端-商品管理'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
@@ -217,11 +107,11 @@ export async function productRoutes(fastify: FastifyInstance) {
   });
 
   // 管理端接口 - 获取单个商品（需要鉴权）
-  fastify.get('/admin/:id', {
+  fastify.get('/:id', {
     preHandler: authenticate,
     schema: {
       description: '获取商品详情（管理端）',
-      tags: ['商品管理'],
+      tags: ['管理端-商品管理'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -256,11 +146,11 @@ export async function productRoutes(fastify: FastifyInstance) {
   });
 
   // 管理端接口 - 更新商品（需要鉴权）
-  fastify.put('/admin/:id', {
+  fastify.put('/:id', {
     preHandler: authenticate,
     schema: {
       description: '更新商品',
-      tags: ['商品管理'],
+      tags: ['管理端-商品管理'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -308,11 +198,11 @@ export async function productRoutes(fastify: FastifyInstance) {
   });
 
   // 管理端接口 - 删除商品（需要鉴权）
-  fastify.delete('/admin/:id', {
+  fastify.delete('/:id', {
     preHandler: authenticate,
     schema: {
       description: '删除商品',
-      tags: ['商品管理'],
+      tags: ['管理端-商品管理'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
@@ -347,11 +237,11 @@ export async function productRoutes(fastify: FastifyInstance) {
   });
 
   // 管理端接口 - 更新库存（需要鉴权）
-  fastify.patch('/admin/:id/stock', {
+  fastify.patch('/:id/stock', {
     preHandler: authenticate,
     schema: {
       description: '更新商品库存',
-      tags: ['商品管理'],
+      tags: ['管理端-商品管理'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
