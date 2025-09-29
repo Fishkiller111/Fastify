@@ -10,6 +10,13 @@ export interface Product {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+
+  // 新增多媒体字段
+  media_type?: 'image' | 'video';
+  video_url?: string;
+  thumbnail_url?: string;
+  media_duration?: number; // 视频时长（秒）
+  media_size?: number; // 媒体文件大小（字节）
 }
 
 export interface CreateProductRequest {
@@ -21,6 +28,13 @@ export interface CreateProductRequest {
   image_url?: string;
   store_id?: number;
   is_active?: boolean;
+
+  // 新增多媒体字段
+  media_type?: 'image' | 'video';
+  video_url?: string;
+  thumbnail_url?: string;
+  media_duration?: number;
+  media_size?: number;
 }
 
 export interface UpdateProductRequest {
@@ -32,6 +46,13 @@ export interface UpdateProductRequest {
   image_url?: string;
   store_id?: number;
   is_active?: boolean;
+
+  // 新增多媒体字段
+  media_type?: 'image' | 'video';
+  video_url?: string;
+  thumbnail_url?: string;
+  media_duration?: number;
+  media_size?: number;
 }
 
 export interface ProductListQuery {

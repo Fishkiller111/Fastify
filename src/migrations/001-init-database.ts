@@ -234,8 +234,23 @@ export const up = async (): Promise<void> => {
       if (!columnNames.includes('store_id')) {
         await client.query('ALTER TABLE products ADD COLUMN store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE');
       }
+
+      // 添加媒体相关字段（如果不存在）
+      if (!columnNames.includes('media_type')) {
+        await client.query(`
+          ALTER TABLE products
+          ADD COLUMN IF NOT EXISTS media_type VARCHAR(10) CHECK (media_type IN ('image', 'video')),
+          ADD COLUMN IF NOT EXISTS video_url VARCHAR(500),
+          ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR(500),
+          ADD COLUMN IF NOT EXISTS media_duration INTEGER,
+          ADD COLUMN IF NOT EXISTS media_size BIGINT;
+        `);
+
+        // 创建媒体类型索引
+        await client.query('CREATE INDEX IF NOT EXISTS idx_products_media_type ON products(media_type)');
+      }
     } else {
-      // 创建新表
+      // 创建新表（包含媒体字段）
       await client.query(`
         CREATE TABLE products (
           id SERIAL PRIMARY KEY,
@@ -247,6 +262,11 @@ export const up = async (): Promise<void> => {
           image_url VARCHAR(500),
           store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
           is_active BOOLEAN NOT NULL DEFAULT true,
+          media_type VARCHAR(10) CHECK (media_type IN ('image', 'video')),
+          video_url VARCHAR(500),
+          thumbnail_url VARCHAR(500),
+          media_duration INTEGER,
+          media_size BIGINT,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
@@ -258,6 +278,7 @@ export const up = async (): Promise<void> => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_products_store_id ON products(store_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_media_type ON products(media_type)');
 
     // 创建触发器（如果不存在）
     await client.query(`

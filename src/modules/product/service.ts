@@ -105,14 +105,25 @@ export class ProductService {
         category,
         image_url,
         store_id,
-        is_active = true
+        is_active = true,
+        media_type,
+        video_url,
+        thumbnail_url,
+        media_duration,
+        media_size
       } = productData;
 
       const result = await client.query(`
-        INSERT INTO products (name, description, price, stock, category, image_url, store_id, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO products (
+          name, description, price, stock, category, image_url, store_id, is_active,
+          media_type, video_url, thumbnail_url, media_duration, media_size
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *
-      `, [name, description, price, stock, category, image_url, store_id, is_active]);
+      `, [
+        name, description, price, stock, category, image_url, store_id, is_active,
+        media_type, video_url, thumbnail_url, media_duration, media_size
+      ]);
 
       return result.rows[0];
     } finally {
@@ -190,5 +201,10 @@ export class ProductService {
     } finally {
       await client.end();
     }
+  }
+
+  // 便捷方法，与getProductById一致
+  async getProduct(id: number): Promise<Product | null> {
+    return this.getProductById(id);
   }
 }

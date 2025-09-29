@@ -5,6 +5,7 @@ import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
 import userProductRoutes from '../modules/product/user-routes.js';
 import adminProductRoutes from '../modules/product/admin-routes.js';
+import productMediaRoutes from '../modules/product/media-routes.js';
 import userStoreRoutes from '../modules/store/user-routes.js';
 import adminStoreRoutes from '../modules/store/admin-routes.js';
 import storageRoutes from '../modules/storage/routes.js';
@@ -31,6 +32,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册管理端商品路由
   fastify.register(adminProductRoutes, { prefix: '/api/admin/products' });
+
+  // 注册商品媒体管理路由
+  fastify.register(productMediaRoutes, { prefix: '/api/media' });
 
   // 注册用户端店铺路由
   fastify.register(userStoreRoutes, { prefix: '/api/stores' });
