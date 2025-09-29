@@ -1,21 +1,29 @@
 {
-  "name": "create-fastify-typescript-api",
+  "name": "Fastify-fast-dev",
   "version": "1.0.0",
-  "description": "Fastify TypeScript API模板，包含JWT认证、PostgreSQL数据库、Swagger文档",
-  "keywords": ["fastify", "typescript", "jwt", "postgresql", "api", "template", "create"],
+  "description": "Fastify-fast-dev",
+  "keywords": [
+    "fastify",
+    "typescript",
+    "jwt",
+    "postgresql",
+    "api",
+    "template",
+    "create"
+  ],
   "author": {
-    "name": "Developer",
-    "email": "developer@example.com"
+    "name": "fishkiller",
+    "email": "lijingyue49@gmail.com"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fishkiller111/create-fastify-typescript-api.git"
+    "url": "git@github.com:Fishkiller111/Fastify.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/create-fastify-typescript-api/issues"
+    "url": "https://github.com/Fishkiller111/Fastify/issues"
   },
-  "homepage": "https://github.com/your-username/create-fastify-typescript-api#readme",
+  "homepage": "https://github.com/Fishkiller111/Fastify#readme",
   "bin": {
     "create-fastify-api": "./setup.js"
   },
