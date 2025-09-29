@@ -99,15 +99,35 @@ export default async function storageRoutes(fastify: FastifyInstance) {
   fastify.post('/switch/:type', {
     preHandler: authenticate,
     schema: {
-      description: '切换默认存储类型',
+      description: '切换默认存储类型（切换到阿里云OSS或本地存储）',
       tags: ['存储管理'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         properties: {
-          type: { type: 'string', enum: ['aliyun_oss', 'local'] }
+          type: {
+            type: 'string',
+            enum: ['aliyun_oss', 'local'],
+            description: '存储类型：aliyun_oss（阿里云OSS）或 local（本地存储）'
+          }
         },
         required: ['type']
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string', description: '切换结果消息' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, async (request: FastifyRequest<{ Params: { type: StorageType } }>, reply) => {
@@ -205,18 +225,61 @@ export default async function storageRoutes(fastify: FastifyInstance) {
   fastify.post('/config', {
     preHandler: authenticate,
     schema: {
-      description: '创建存储配置',
+      description: '创建存储配置（包括阿里云OSS配置）',
       tags: ['存储管理'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
         properties: {
-          storage_type: { type: 'string', enum: ['aliyun_oss', 'local'] },
-          status: { type: 'string', enum: ['active', 'inactive', 'disabled'] },
-          is_default: { type: 'boolean' },
-          config: { type: 'object' }
+          storage_type: {
+            type: 'string',
+            enum: ['aliyun_oss', 'local'],
+            description: '存储类型'
+          },
+          status: {
+            type: 'string',
+            enum: ['active', 'inactive', 'disabled'],
+            description: '存储状态'
+          },
+          is_default: {
+            type: 'boolean',
+            description: '是否设为默认存储'
+          },
+          config: {
+            type: 'object',
+            description: 'OSS配置对象，包含accessKeyId、accessKeySecret、region、bucket等字段',
+            additionalProperties: true
+          }
         },
         required: ['storage_type', 'status', 'is_default', 'config']
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'number' },
+                storage_type: { type: 'string' },
+                status: { type: 'string' },
+                is_default: { type: 'boolean' },
+                config: { type: 'object' },
+                created_at: { type: 'string' },
+                updated_at: { type: 'string' }
+              }
+            },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, async (request: FastifyRequest<{ Body: CreateStorageConfigRequest }>, reply) => {
@@ -342,15 +405,42 @@ export default async function storageRoutes(fastify: FastifyInstance) {
   fastify.post('/config/:type/test', {
     preHandler: authenticate,
     schema: {
-      description: '测试存储连接',
+      description: '测试阿里云OSS或本地存储连接',
       tags: ['存储管理'],
       security: [{ bearerAuth: [] }],
       params: {
         type: 'object',
         properties: {
-          type: { type: 'string', enum: ['aliyun_oss', 'local'] }
+          type: {
+            type: 'string',
+            enum: ['aliyun_oss', 'local'],
+            description: '存储类型：aliyun_oss（阿里云OSS）或 local（本地存储）'
+          }
         },
         required: ['type']
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', description: '连接是否成功' },
+            message: { type: 'string', description: '连接结果消息' },
+            data: {
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' }
+              }
+            }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        }
       }
     }
   }, async (request: FastifyRequest<{ Params: { type: StorageType } }>, reply) => {

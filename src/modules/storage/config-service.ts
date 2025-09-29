@@ -344,30 +344,32 @@ export class StorageConfigService {
     }
 
     // OSS配置项
-    if (storageType === StorageType.ALIYUN_OSS) {
+    if (storageType === StorageType.ALIYUN_OSS && data.config) {
+      const ossConfig = data.config;
       const ossFields = [
         'accessKeyId', 'accessKeySecret', 'region', 'bucket',
         'endpoint', 'internal', 'secure', 'timeout'
       ];
 
       for (const field of ossFields) {
-        if (data[field] !== undefined) {
+        if (ossConfig[field] !== undefined) {
           const configKey = this.getConfigKey(storageType, field.replace(/([A-Z])/g, '_$1').toLowerCase());
-          items.push([configKey, data[field].toString()]);
+          items.push([configKey, ossConfig[field].toString()]);
         }
       }
     }
 
     // 本地存储配置项
-    if (storageType === StorageType.LOCAL) {
+    if (storageType === StorageType.LOCAL && data.config) {
+      const localConfig = data.config;
       const localFields = [
         'uploadPath', 'maxFileSize', 'allowedFileTypes', 'enableCompression', 'compressQuality'
       ];
 
       for (const field of localFields) {
-        if (data[field] !== undefined) {
+        if (localConfig[field] !== undefined) {
           const configKey = this.getConfigKey(storageType, field.replace(/([A-Z])/g, '_$1').toLowerCase());
-          let value = data[field];
+          let value = localConfig[field];
 
           // 特殊处理数组类型的 allowedFileTypes
           if (field === 'allowedFileTypes' && Array.isArray(value)) {
