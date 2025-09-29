@@ -1,7 +1,7 @@
 {
-  "name": "fastify-fast-dev",
-  "version": "1.0.2",
-  "description": "Fastify-fast-dev",
+  "name": "fastify-fast-market",
+  "version": "1.0.0",
+  "description": "Fastify-fast-market",
   "keywords": [
     "fastify",
     "typescript",
@@ -26,7 +26,7 @@
   "homepage": "https://github.com/Fishkiller111/Fastify#readme",
   "bin": {
     "create-fastify-api": "./bin/create-fastify-app.js",
-    "fastify-fast-dev": "./bin/create-fastify-app.js"
+    "fastify-fast-market": "./bin/create-fastify-app.js"
   },
   "files": [
     "bin/**/*",
