@@ -1,9 +1,45 @@
 {
+  "name": "create-fastify-typescript-api",
+  "version": "1.0.0",
+  "description": "Fastify TypeScript API模板，包含JWT认证、PostgreSQL数据库、Swagger文档",
+  "keywords": ["fastify", "typescript", "jwt", "postgresql", "api", "template", "create"],
+  "author": {
+    "name": "Developer",
+    "email": "developer@example.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fishkiller111/create-fastify-typescript-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/create-fastify-typescript-api/issues"
+  },
+  "homepage": "https://github.com/your-username/create-fastify-typescript-api#readme",
+  "bin": {
+    "create-fastify-api": "./setup.js"
+  },
+  "files": [
+    "src/**/*",
+    "scripts/**/*",
+    "tsconfig.json",
+    "template.json",
+    ".env.template",
+    "setup.js",
+    "CLAUDE.md",
+    "IFLOW.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --exec 'node --loader ts-node/esm' src/server.ts",
-    "migrate": "node dist/migrations/run-migrations.js"
+    "migrate": "node dist/migrations/run-migrations.js",
+    "setup": "node setup.js",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@alicloud/pop-core": "^1.8.0",

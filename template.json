@@ -1,0 +1,66 @@
+{
+  "name": "fastify-typescript-template",
+  "description": "Fastify TypeScript API模板，包含JWT认证、PostgreSQL数据库、Swagger文档",
+  "version": "1.0.0",
+  "type": "template",
+  "keywords": ["fastify", "typescript", "jwt", "postgresql", "api", "template"],
+  "author": {
+    "name": "Developer",
+    "email": "developer@example.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/fastify-typescript-template.git"
+  },
+  "template": {
+    "excludes": [
+      "node_modules/**",
+      "dist/**",
+      ".git/**",
+      "*.log",
+      ".env",
+      "pnpm-lock.yaml"
+    ],
+    "variables": {
+      "projectName": {
+        "type": "string",
+        "description": "项目名称",
+        "default": "my-fastify-api"
+      },
+      "projectDescription": {
+        "type": "string",
+        "description": "项目描述",
+        "default": "Fastify TypeScript API项目"
+      },
+      "authorName": {
+        "type": "string",
+        "description": "作者姓名",
+        "default": "Your Name"
+      },
+      "authorEmail": {
+        "type": "string",
+        "description": "作者邮箱",
+        "default": "your.email@example.com"
+      },
+      "databaseName": {
+        "type": "string",
+        "description": "数据库名称",
+        "default": "{{projectName}}_db"
+      },
+      "serverPort": {
+        "type": "number",
+        "description": "服务器端口",
+        "default": 3000
+      }
+    },
+    "scripts": {
+      "postInstall": [
+        "npm install",
+        "echo '请配置.env文件中的数据库连接信息'",
+        "echo '运行 npm run migrate 来创建数据库表'",
+        "echo '运行 npm run dev 启动开发服务器'"
+      ]
+    }
+  }
+}

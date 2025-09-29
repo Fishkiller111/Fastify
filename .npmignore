@@ -1,0 +1,33 @@
+# 不发布到npm的文件和目录
+node_modules/
+dist/
+.git/
+*.log
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# 测试相关
+coverage/
+.nyc_output/
+test/
+tests/
+__tests__/
+
+# 开发工具
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 其他
+*.tgz
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
