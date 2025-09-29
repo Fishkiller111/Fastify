@@ -40,3 +40,49 @@ export interface JwtPayload {
   userId: number;
   username: string;
 }
+
+// 安全的用户信息接口（不包含密码）
+export interface SafeUser {
+  id: number;
+  username: string;
+  email: string;
+  phone_number?: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// 用户管理 - 创建用户请求体接口
+export interface CreateUserRequest {
+  username: string;
+  email: string;
+  password: string;
+  phone_number?: string;
+}
+
+// 用户管理 - 更新用户请求体接口
+export interface UpdateUserRequest {
+  username?: string;
+  email?: string;
+  password?: string;
+  phone_number?: string;
+}
+
+// 用户管理 - 用户列表查询接口
+export interface UserListQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: 'id' | 'username' | 'email' | 'created_at';
+  sortOrder?: 'asc' | 'desc';
+}
+
+// 用户管理 - 分页响应接口
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
