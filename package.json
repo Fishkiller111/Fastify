@@ -51,11 +51,14 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.0.4",
+    "@ai-sdk/openai": "^1.0.4",
     "@alicloud/pop-core": "^1.8.0",
     "@anthropic-ai/sdk": "^0.33.1",
     "@fastify/jwt": "^10.0.0",
     "@fastify/swagger": "^9.5.2",
     "@fastify/swagger-ui": "^5.2.3",
+    "@mastra/core": "^0.18.0",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "axios": "^1.12.2",
@@ -64,7 +67,8 @@
     "fastify": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.104.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

@@ -4,6 +4,8 @@ import userRoutes from '../modules/user/routes.js';
 import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
 import aiRoutes from '../modules/ai/routes.js';
+import agentRoutes from '../modules/ai/agent-routes.js';
+import sessionRoutes from '../modules/ai/session-routes.js';
 
 /**
  * 注册所有路由
@@ -24,6 +26,12 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册AI服务路由
   fastify.register(aiRoutes, { prefix: '/api/ai' });
+
+  // 注册Mastra Agent路由
+  fastify.register(agentRoutes, { prefix: '/api/ai' });
+
+  // 注册Agent会话路由
+  fastify.register(sessionRoutes, { prefix: '/api/ai' });
 }
 
 export default registerRoutes;
