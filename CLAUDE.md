@@ -31,8 +31,8 @@ This is a **Fastify-based REST API** with TypeScript, JWT authentication, and Po
 ```
 src/
 ├── config/           # Environment and database configuration
-├── migrations/       # Database schema migrations
-├── modules/          # Feature modules (auth, user, verification, sms, config)
+├── migrations/       # Database schema migrations (CENTRALIZED in 001-init-database.ts)
+├── modules/          # Feature modules (auth, user, product, store, verification, storage)
 ├── plugins/          # Fastify plugins (JWT authentication)
 ├── routes/           # Route registration and organization
 ├── scripts/          # Utility scripts
@@ -55,8 +55,9 @@ Each module follows this structure:
 #### Database Layer
 - **Connection**: PostgreSQL with `pg` driver
 - **Configuration**: `src/config/database.ts` and `src/config/index.ts`
-- **Migrations**: Located in `src/migrations/` with sequential numbering
+- **Migrations**: **CENTRALIZED in `src/migrations/001-init-database.ts`** - DO NOT create separate migration files
 - **Pattern**: Services handle all database operations, routes handle HTTP concerns
+- **Schema Evolution**: All schema changes are handled in the main migration file with intelligent column detection
 
 #### Module Registration
 1. **Server Setup**: `src/server.ts` registers plugins and routes
@@ -74,9 +75,12 @@ Each module follows this structure:
 - **Key Settings**: Database connection, JWT secret, server host/port
 
 ### Database Schema
-- **Users**: Authentication and profile data
-- **Config**: Application configuration storage
-- **Migrations**: Version-controlled schema changes
+- **Users**: Authentication and profile data with role-based access
+- **Stores**: E-commerce store management with owner relationships
+- **Products**: Product catalog with media support (images/videos) and dual storage system
+- **Config**: Application configuration storage for system settings and storage configurations
+- **Admins**: Administrative user management with permissions
+- **Migrations**: Centralized schema management in single file
 
 ## Important Implementation Notes
 
@@ -91,9 +95,19 @@ Each module follows this structure:
 - Package.json has `"type": "module"` configuration
 
 ### Database Migrations
-- Run in sequence using `npm run migrate`
-- Each migration is numbered (001, 002, 003, etc.)
-- Migration runner tracks completed migrations to avoid re-execution
+- **CRITICAL**: All database changes are centralized in `src/migrations/001-init-database.ts`
+- **DO NOT** create separate migration files (004-*, 005-*, etc.)
+- Run using `npm run migrate` - intelligently detects and adds missing columns
+- Migration file handles both new database creation and existing database updates
+- Uses column existence checking to safely add new fields to existing tables
+
+### E-commerce & Media Architecture
+- **Dual Storage System**: Supports both Aliyun OSS and local file storage with seamless switching
+- **Product Media**: Products support both images and videos with automatic thumbnail generation
+- **Storage Abstraction**: `StorageManager` provides unified interface for different storage backends
+- **Media Processing**: Automatic image compression, video thumbnail generation, and file validation
+- **Storage Configuration**: Runtime storage switching through database configuration
+- **API Structure**: Separate media routes (`/api/media/*`) for file upload and management operations
 
 ### Error Handling
 - Routes should handle errors gracefully with appropriate HTTP status codes
@@ -125,3 +139,41 @@ Variables in templates use `{{variableName}}` syntax and are replaced during pro
 - `{{authorName}}` and `{{authorEmail}}` - Author information
 - `{{databaseName}}` - Database name (auto-generated from project name)
 - `{{serverPort}}` - Server port configuration
+
+## Key API Endpoints
+
+### Authentication & Users
+- `/api/auth/*` - User authentication (login, register, refresh)
+- `/api/user/*` - User profile management
+- `/api/admin/users/*` - Admin user management
+
+### E-commerce Core
+- `/api/products/*` - User-facing product browsing
+- `/api/admin/products/*` - Admin product management
+- `/api/media/*` - Product media upload and management
+- `/api/stores/*` - Store browsing and management
+- `/api/admin/stores/*` - Admin store management
+
+### System Management
+- `/api/verification/*` - Phone/email verification
+- `/api/admin/storage/*` - Storage configuration management
+
+## Development Best Practices for AI Assistants
+
+### Database Schema Changes
+1. **Always modify `src/migrations/001-init-database.ts`** - never create new migration files
+2. Add column existence checks before adding new fields: `if (!columnNames.includes('new_field'))`
+3. Include proper indexes for new fields that will be queried frequently
+4. Test both new database creation and existing database updates
+
+### Module Development Pattern
+1. Create module in `src/modules/{feature}/` with routes, service, types files
+2. Register routes in `src/routes/index.ts` with appropriate prefix
+3. Follow existing authentication patterns using direct JWT verification
+4. Implement proper error handling with consistent HTTP status codes
+
+### Media and File Handling
+1. Use `ProductMediaService` for product-related media operations
+2. Leverage `StorageManager` for storage abstraction - never directly access storage providers
+3. Always validate file types and sizes before processing
+4. Generate thumbnails for videos and compress images automatically
