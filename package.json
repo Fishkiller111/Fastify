@@ -25,7 +25,7 @@
   },
   "homepage": "https://github.com/Fishkiller111/Fastify#readme",
   "bin": {
-    "create-fastify-api": "./bin/create-fastify-app.js",
+    "create-fastify-api-market": "./bin/create-fastify-app.js",
     "fastify-fast-market": "./bin/create-fastify-app.js"
   },
   "files": [
