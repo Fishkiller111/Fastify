@@ -3,6 +3,7 @@ import authRoutes from '../modules/auth/routes.js';
 import userRoutes from '../modules/user/routes.js';
 import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
+import aiRoutes from '../modules/ai/routes.js';
 
 /**
  * 注册所有路由
@@ -20,6 +21,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册验证码路由
   fastify.register(verificationRoutes, { prefix: '/api/verification' });
+
+  // 注册AI服务路由
+  fastify.register(aiRoutes, { prefix: '/api/ai' });
 }
 
 export default registerRoutes;
