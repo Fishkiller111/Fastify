@@ -99,3 +99,29 @@ Each module follows this structure:
 - Routes should handle errors gracefully with appropriate HTTP status codes
 - Database errors should be caught and translated to user-friendly messages
 - JWT verification errors should return 401 with consistent error format
+
+## Template Package Architecture
+
+This repository serves dual purposes:
+1. **Working Fastify API**: Complete API implementation ready for development
+2. **NPM Template Package**: Published as `fastify-fast-dev` for creating new projects
+
+### Template Generation System
+- **Entry Point**: `bin/create-fastify-app.js` - Project generator script
+- **Template Config**: `template.json` - Defines template variables and exclusions
+- **Environment Template**: `.env.template` - Environment variables with placeholder substitution
+- **Setup Script**: `setup.js` - Legacy setup for in-place configuration
+
+### Package Publication
+- **NPM Package Name**: `fastify-fast-dev`
+- **Binary Commands**: `create-fastify-api` and `fastify-fast-dev`
+- **Usage**: `npx fastify-fast-dev my-project` to create new projects
+- **Template Files**: Copies entire source structure excluding `node_modules`, `dist`, `.git`, and template-specific files
+
+### Template Variable System
+Variables in templates use `{{variableName}}` syntax and are replaced during project generation:
+- `{{projectName}}` - Target project name
+- `{{projectDescription}}` - Project description
+- `{{authorName}}` and `{{authorEmail}}` - Author information
+- `{{databaseName}}` - Database name (auto-generated from project name)
+- `{{serverPort}}` - Server port configuration
