@@ -78,8 +78,6 @@ const initializeAI = async () => {
 
     console.log(`✅ AI模块初始化完成:`);
     console.log(`   📋 提供商: ${provider.toUpperCase()}`);
-    console.log(`   🔧 模型: ${currentConfig.model}`);
-    console.log(`   🌐 基础URL: ${currentConfig.baseUrl}`);
     console.log(`   🎛️  参数: maxTokens=${aiConfig.maxTokens}, temperature=${aiConfig.temperature}`);
     console.log(`   📡 API状态: http://${config.server.host}:${config.server.port}/api/ai/status`);
   } catch (error) {
