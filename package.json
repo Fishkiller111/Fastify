@@ -1,6 +1,6 @@
 {
   "name": "fastify-fast-dev",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fastify-fast-dev",
   "keywords": [
     "fastify",
@@ -25,17 +25,18 @@
   },
   "homepage": "https://github.com/Fishkiller111/Fastify#readme",
   "bin": {
-    "create-fastify-api": "./setup.js"
+    "create-fastify-api": "./bin/create-fastify-app.js",
+    "fastify-fast-dev": "./bin/create-fastify-app.js"
   },
   "files": [
+    "bin/**/*",
     "src/**/*",
     "scripts/**/*",
     "tsconfig.json",
     "template.json",
     ".env.template",
     "setup.js",
-    "CLAUDE.md",
-    "IFLOW.md"
+    "CLAUDE.md"
   ],
   "engines": {
     "node": ">=18.0.0",
