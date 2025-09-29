@@ -13,11 +13,7 @@ declare module 'fastify' {
 export interface JwtUser {
   userId: number;
   username: string;
-}
-
-// 扩展FastifyRequest类型以包含用户信息
-interface RequestWithUser extends FastifyRequest {
-  user: string | object | Buffer | JwtUser;
+  role: string;
 }
 
 /**
@@ -36,7 +32,7 @@ async function jwtPlugin(fastify: FastifyInstance) {
   console.log('JWT plugin registered successfully');
 
   // 添加装饰器用于验证JWT
-  fastify.decorate('authenticate', async function (request: RequestWithUser, reply: FastifyReply) {
+  fastify.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
     try {
       console.log('=== JWT Authentication Started ===');
       console.log('Authorization header:', request.headers.authorization);

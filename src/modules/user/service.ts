@@ -1,4 +1,4 @@
-import { User, SafeUser, CreateUserRequest, UpdateUserRequest, UserListQuery, PaginatedResponse } from '../auth/types.js';
+import { User, SafeUser, CreateUserRequest, UpdateUserRequest, UpdateUserRoleRequest, UserListQuery, PaginatedResponse } from '../auth/types.js';
 import pool from '../../config/database.js';
 import bcrypt from 'bcrypt';
 
@@ -13,14 +13,14 @@ class UserService {
    */
   async getUserById(id: number): Promise<User | null> {
     const client = await pool.connect();
-    
+
     try {
       const result = await client.query('SELECT * FROM users WHERE id = $1', [id]);
-      
+
       if (result.rows.length === 0) {
         return null;
       }
-      
+
       const row = result.rows[0];
       const user: User = {
         id: row.id,
@@ -28,10 +28,14 @@ class UserService {
         email: row.email,
         password: row.password,
         phone_number: row.phone_number,
+        role: row.role || 'user',
+        permissions: row.permissions || ['user_access'],
+        status: row.status || 'active',
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
-      
+
       return user;
     } finally {
       client.release();
@@ -45,14 +49,14 @@ class UserService {
    */
   async getUserByEmail(email: string): Promise<User | null> {
     const client = await pool.connect();
-    
+
     try {
       const result = await client.query('SELECT * FROM users WHERE email = $1', [email]);
-      
+
       if (result.rows.length === 0) {
         return null;
       }
-      
+
       const row = result.rows[0];
       const user: User = {
         id: row.id,
@@ -60,16 +64,20 @@ class UserService {
         email: row.email,
         password: row.password,
         phone_number: row.phone_number,
+        role: row.role || 'user',
+        permissions: row.permissions || ['user_access'],
+        status: row.status || 'active',
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
-      
+
       return user;
     } finally {
       client.release();
     }
   }
-  
+
   /**
    * 根据手机号获取用户信息
    * @param phoneNumber 用户手机号
@@ -77,14 +85,14 @@ class UserService {
    */
   async getUserByPhoneNumber(phoneNumber: string): Promise<User | null> {
     const client = await pool.connect();
-    
+
     try {
       const result = await client.query('SELECT * FROM users WHERE phone_number = $1', [phoneNumber]);
-      
+
       if (result.rows.length === 0) {
         return null;
       }
-      
+
       const row = result.rows[0];
       const user: User = {
         id: row.id,
@@ -92,10 +100,14 @@ class UserService {
         email: row.email,
         password: row.password,
         phone_number: row.phone_number,
+        role: row.role || 'user',
+        permissions: row.permissions || ['user_access'],
+        status: row.status || 'active',
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
-      
+
       return user;
     } finally {
       client.release();
@@ -140,7 +152,7 @@ class UserService {
 
       // 查询用户数据（不包含密码）
       const userQuery = `
-        SELECT id, username, email, phone_number, created_at, updated_at
+        SELECT id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
         FROM users
         ${whereClause}
         ${orderClause}
@@ -154,6 +166,10 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        role: row.role || 'user',
+        permissions: row.permissions || ['user_access'],
+        status: row.status || 'active',
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       }));
@@ -182,7 +198,7 @@ class UserService {
 
     try {
       const result = await client.query(
-        'SELECT id, username, email, phone_number, created_at, updated_at FROM users WHERE id = $1',
+        'SELECT id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at FROM users WHERE id = $1',
         [id]
       );
 
@@ -196,6 +212,10 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        role: row.role || 'user',
+        permissions: row.permissions || ['user_access'],
+        status: row.status || 'active',
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
@@ -240,16 +260,19 @@ class UserService {
 
       // 插入用户数据
       const insertQuery = `
-        INSERT INTO users (username, email, password, phone_number)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, username, email, phone_number, created_at, updated_at
+        INSERT INTO users (username, email, password, phone_number, role, permissions, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
       `;
 
       const result = await client.query(insertQuery, [
         userData.username,
         userData.email,
         hashedPassword,
-        userData.phone_number || null
+        userData.phone_number || null,
+        'user',
+        ['user_access'],
+        'active'
       ]);
 
       await client.query('COMMIT');
@@ -260,6 +283,10 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        role: row.role,
+        permissions: row.permissions,
+        status: row.status,
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
@@ -332,6 +359,21 @@ class UserService {
         values.push(userData.phone_number || null);
       }
 
+      if (userData.role !== undefined) {
+        updates.push(`role = $${paramIndex++}`);
+        values.push(userData.role);
+
+        // 根据角色设置默认权限
+        const defaultPermissions = userData.role === 'admin' ? ['admin_access', 'user_management'] : ['user_access'];
+        updates.push(`permissions = $${paramIndex++}`);
+        values.push(defaultPermissions);
+      }
+
+      if (userData.status !== undefined) {
+        updates.push(`status = $${paramIndex++}`);
+        values.push(userData.status);
+      }
+
       if (updates.length === 0) {
         // 没有更新字段，直接返回当前用户信息
         await client.query('ROLLBACK');
@@ -346,7 +388,7 @@ class UserService {
         UPDATE users
         SET ${updates.join(', ')}
         WHERE id = $${paramIndex}
-        RETURNING id, username, email, phone_number, created_at, updated_at
+        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
       `;
 
       const result = await client.query(updateQuery, values);
@@ -359,6 +401,63 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        role: row.role,
+        permissions: row.permissions,
+        status: row.status,
+        last_login_at: row.last_login_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 更新用户角色
+   * @param id 用户ID
+   * @param roleData 角色数据
+   * @returns 更新后的用户信息
+   */
+  async updateUserRole(id: number, roleData: UpdateUserRoleRequest): Promise<SafeUser | null> {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // 检查用户是否存在
+      const userCheck = await client.query('SELECT id FROM users WHERE id = $1', [id]);
+      if (userCheck.rows.length === 0) {
+        return null;
+      }
+
+      // 根据角色设置默认权限
+      const defaultPermissions = roleData.role === 'admin' ? ['admin_access', 'user_management'] : ['user_access'];
+
+      const updateQuery = `
+        UPDATE users
+        SET role = $1, permissions = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+      `;
+
+      const result = await client.query(updateQuery, [roleData.role, defaultPermissions, id]);
+
+      await client.query('COMMIT');
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        phone_number: row.phone_number,
+        role: row.role,
+        permissions: row.permissions,
+        status: row.status,
+        last_login_at: row.last_login_at,
         created_at: row.created_at,
         updated_at: row.updated_at
       };
@@ -387,75 +486,74 @@ class UserService {
   }
 
   /**
-   * 检查用户名是否存在
-   * @param username 用户名
-   * @param excludeId 排除的用户ID（用于更新时检查）
-   * @returns 是否存在
+   * 创建管理员用户
+   * @param userData 管理员数据
+   * @returns 创建的管理员用户信息
    */
-  async isUsernameExists(username: string, excludeId?: number): Promise<boolean> {
+  async createAdmin(userData: CreateUserRequest): Promise<SafeUser> {
     const client = await pool.connect();
 
     try {
-      let query = 'SELECT id FROM users WHERE username = $1';
-      const params: any[] = [username];
+      await client.query('BEGIN');
 
-      if (excludeId) {
-        query += ' AND id != $2';
-        params.push(excludeId);
+      // 检查用户名是否已存在
+      const usernameCheck = await client.query('SELECT id FROM users WHERE username = $1', [userData.username]);
+      if (usernameCheck.rows.length > 0) {
+        throw new Error('用户名已存在');
       }
 
-      const result = await client.query(query, params);
-      return result.rows.length > 0;
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
-   * 检查邮箱是否存在
-   * @param email 邮箱
-   * @param excludeId 排除的用户ID（用于更新时检查）
-   * @returns 是否存在
-   */
-  async isEmailExists(email: string, excludeId?: number): Promise<boolean> {
-    const client = await pool.connect();
-
-    try {
-      let query = 'SELECT id FROM users WHERE email = $1';
-      const params: any[] = [email];
-
-      if (excludeId) {
-        query += ' AND id != $2';
-        params.push(excludeId);
+      // 检查邮箱是否已存在
+      const emailCheck = await client.query('SELECT id FROM users WHERE email = $1', [userData.email]);
+      if (emailCheck.rows.length > 0) {
+        throw new Error('邮箱已存在');
       }
 
-      const result = await client.query(query, params);
-      return result.rows.length > 0;
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
-   * 检查手机号是否存在
-   * @param phoneNumber 手机号
-   * @param excludeId 排除的用户ID（用于更新时检查）
-   * @returns 是否存在
-   */
-  async isPhoneNumberExists(phoneNumber: string, excludeId?: number): Promise<boolean> {
-    const client = await pool.connect();
-
-    try {
-      let query = 'SELECT id FROM users WHERE phone_number = $1';
-      const params: any[] = [phoneNumber];
-
-      if (excludeId) {
-        query += ' AND id != $2';
-        params.push(excludeId);
+      // 检查手机号是否已存在（如果提供了手机号）
+      if (userData.phone_number) {
+        const phoneCheck = await client.query('SELECT id FROM users WHERE phone_number = $1', [userData.phone_number]);
+        if (phoneCheck.rows.length > 0) {
+          throw new Error('手机号已存在');
+        }
       }
 
-      const result = await client.query(query, params);
-      return result.rows.length > 0;
+      // 加密密码
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+
+      // 插入管理员用户数据
+      const insertQuery = `
+        INSERT INTO users (username, email, password, phone_number, role, permissions, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+      `;
+
+      const result = await client.query(insertQuery, [
+        userData.username,
+        userData.email,
+        hashedPassword,
+        userData.phone_number || null,
+        'admin',
+        ['admin_access', 'user_management'],
+        'active'
+      ]);
+
+      await client.query('COMMIT');
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        phone_number: row.phone_number,
+        role: row.role,
+        permissions: row.permissions,
+        status: row.status,
+        last_login_at: row.last_login_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
     } finally {
       client.release();
     }

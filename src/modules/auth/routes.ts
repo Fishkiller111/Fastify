@@ -1,8 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { RegisterRequest, LoginRequest, SMSRegisterRequest, SMSLoginRequest } from './types.js';
+import { RegisterRequest, LoginRequest, SMSRegisterRequest, SMSLoginRequest, CreateUserRequest } from './types.js';
 import AuthService from './service.js';
 import { getLoginConfig, LoginMethod } from './login-config.js';
 import loginConfigRoutes from './config-routes.js';
+import UserService from '../user/service.js';
 
 /**
  * 认证路由
@@ -244,6 +245,108 @@ async function authRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest<{ Body: LoginRequest | SMSLoginRequest }>, reply: FastifyReply) => {
     try {
       const { user, token } = await AuthService.login(request.body);
+      reply.send({ user, token });
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 管理员注册接口（无需鉴权）
+  fastify.post('/admin/register', {
+    schema: {
+      description: '管理员注册',
+      tags: ['管理员认证'],
+      body: {
+        type: 'object',
+        required: ['username', 'email', 'password'],
+        properties: {
+          username: { type: 'string' },
+          email: { type: 'string' },
+          password: { type: 'string' },
+          phone_number: { type: 'string' }
+        }
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            id: { type: 'number' },
+            username: { type: 'string' },
+            email: { type: 'string' },
+            phone_number: { type: 'string' },
+            role: { type: 'string' },
+            permissions: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            status: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request: FastifyRequest<{ Body: CreateUserRequest }>, reply: FastifyReply) => {
+    try {
+      const admin = await UserService.createAdmin(request.body);
+      reply.code(201).send(admin);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 管理员登录接口（与普通登录功能相同，仅用于区分）
+  fastify.post('/admin/login', {
+    schema: {
+      description: '管理员登录',
+      tags: ['管理员认证'],
+      body: {
+        type: 'object',
+        required: ['email', 'password'],
+        properties: {
+          email: { type: 'string' },
+          password: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'number' },
+                username: { type: 'string' },
+                email: { type: 'string' },
+                phone_number: { type: 'string' },
+                role: { type: 'string' },
+                permissions: {
+                  type: 'array',
+                  items: { type: 'string' }
+                },
+                status: { type: 'string' },
+                created_at: { type: 'string' },
+                updated_at: { type: 'string' }
+              }
+            },
+            token: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request: FastifyRequest<{ Body: LoginRequest }>, reply: FastifyReply) => {
+    try {
+      const { user, token } = await AuthService.loginWithEmail(request.body);
+
+      // 验证用户是否为管理员
+      if (user.role !== 'admin') {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Only administrators can use this login endpoint'
+        });
+      }
+
       reply.send({ user, token });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });

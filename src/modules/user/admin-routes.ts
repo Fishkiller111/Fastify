@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { SafeUser, CreateUserRequest, UpdateUserRequest, UserListQuery, PaginatedResponse } from '../auth/types.js';
 import userService from './service.js';
 
@@ -8,31 +8,18 @@ import userService from './service.js';
 async function adminUserRoutes(fastify: FastifyInstance) {
 
   // 获取用户列表
-  fastify.get<{
-    Querystring: UserListQuery,
-    Reply: PaginatedResponse<SafeUser> | { success: false, message: string }
-  }>('/users', {
+  fastify.get('/', {
     schema: {
       description: '获取用户列表',
-      tags: ['管理端 - 用户管理'],
+      tags: ['管理端用户管理'],
       querystring: {
         type: 'object',
         properties: {
-          page: { type: 'integer', minimum: 1, default: 1, description: '页码' },
-          limit: { type: 'integer', minimum: 1, maximum: 100, default: 10, description: '每页条数' },
-          search: { type: 'string', description: '搜索关键词（用户名、邮箱、手机号）' },
-          sortBy: {
-            type: 'string',
-            enum: ['id', 'username', 'email', 'created_at'],
-            default: 'created_at',
-            description: '排序字段'
-          },
-          sortOrder: {
-            type: 'string',
-            enum: ['asc', 'desc'],
-            default: 'desc',
-            description: '排序方向'
-          }
+          page: { type: 'number', minimum: 1, default: 1 },
+          limit: { type: 'number', minimum: 1, maximum: 100, default: 10 },
+          search: { type: 'string' },
+          sortBy: { type: 'string', enum: ['id', 'username', 'email', 'created_at'], default: 'created_at' },
+          sortOrder: { type: 'string', enum: ['asc', 'desc'], default: 'desc' }
         }
       },
       response: {
@@ -44,52 +31,55 @@ async function adminUserRoutes(fastify: FastifyInstance) {
               items: {
                 type: 'object',
                 properties: {
-                  id: { type: 'integer' },
+                  id: { type: 'number' },
                   username: { type: 'string' },
                   email: { type: 'string' },
-                  phone_number: { type: ['string', 'null'] },
-                  created_at: { type: 'string', format: 'date-time' },
-                  updated_at: { type: 'string', format: 'date-time' }
+                  phone_number: { type: 'string' },
+                  role: { type: 'string' },
+                  permissions: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  },
+                  status: { type: 'string' },
+                  last_login_at: { type: 'string' },
+                  created_at: { type: 'string' },
+                  updated_at: { type: 'string' }
                 }
               }
             },
             pagination: {
               type: 'object',
               properties: {
-                page: { type: 'integer' },
-                limit: { type: 'integer' },
-                total: { type: 'integer' },
-                totalPages: { type: 'integer' }
+                page: { type: 'number' },
+                limit: { type: 'number' },
+                total: { type: 'number' },
+                totalPages: { type: 'number' }
               }
             }
           }
         }
-      }
-    }
-  }, async (request, reply) => {
+      },
+      security: [{ bearerAuth: [] }]
+    },
+    preHandler: fastify.adminAuth(['user_management'])
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const result = await userService.getUserList(request.query);
-      return reply.send(result);
+      const result = await userService.getUserList((request as any).query);
+      reply.send(result);
     } catch (error: any) {
-      return reply.status(500).send({
-        success: false,
-        message: '获取用户列表失败'
-      });
+      reply.code(500).send({ error: error.message });
     }
   });
 
-  // 获取用户详情
-  fastify.get<{
-    Params: { id: string },
-    Reply: SafeUser | { success: false, message: string }
-  }>('/users/:id', {
+  // 获取单个用户信息
+  fastify.get('/:id', {
     schema: {
-      description: '获取用户详情',
-      tags: ['管理端 - 用户管理'],
+      description: '获取用户详细信息',
+      tags: ['管理端用户管理'],
       params: {
         type: 'object',
         properties: {
-          id: { type: 'string', pattern: '^[1-9]\\d*$', description: '用户ID' }
+          id: { type: 'number' }
         },
         required: ['id']
       },
@@ -97,222 +87,165 @@ async function adminUserRoutes(fastify: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            id: { type: 'integer' },
+            id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: ['string', 'null'] },
-            created_at: { type: 'string', format: 'date-time' },
-            updated_at: { type: 'string', format: 'date-time' }
-          }
-        },
-        404: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' }
+            phone_number: { type: 'string' },
+            role: { type: 'string' },
+            permissions: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            status: { type: 'string' },
+            last_login_at: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
           }
         }
-      }
-    }
-  }, async (request, reply) => {
+      },
+      security: [{ bearerAuth: [] }]
+    },
+    preHandler: fastify.adminAuth(['user_management'])
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const userId = parseInt(request.params.id);
-      const user = await userService.getSafeUserById(userId);
+      const { id } = (request as any).params;
+      const user = await userService.getSafeUserById(id);
 
       if (!user) {
-        return reply.status(404).send({
-          success: false,
-          message: '用户不存在'
+        return reply.code(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'User not found'
         });
       }
 
-      return reply.send(user);
+      reply.send(user);
     } catch (error: any) {
-      return reply.status(500).send({
-        success: false,
-        message: '获取用户详情失败'
-      });
+      reply.code(500).send({ error: error.message });
     }
   });
 
   // 创建用户
-  fastify.post<{
-    Body: CreateUserRequest,
-    Reply: SafeUser | { success: false, message: string }
-  }>('/users', {
+  fastify.post('/', {
     schema: {
-      description: '创建用户',
-      tags: ['管理端 - 用户管理'],
+      description: '创建新用户',
+      tags: ['管理端用户管理'],
       body: {
         type: 'object',
+        required: ['username', 'email', 'password'],
         properties: {
-          username: {
-            type: 'string',
-            minLength: 2,
-            maxLength: 50,
-            pattern: '^[a-zA-Z0-9_\\u4e00-\\u9fa5]+$',
-            description: '用户名（2-50个字符，支持中文、英文、数字、下划线）'
-          },
-          email: {
-            type: 'string',
-            format: 'email',
-            maxLength: 100,
-            description: '邮箱地址'
-          },
-          password: {
-            type: 'string',
-            minLength: 6,
-            maxLength: 50,
-            description: '密码（6-50个字符）'
-          },
-          phone_number: {
-            type: 'string',
-            pattern: '^[1-9]\\d{10}$',
-            description: '手机号（11位数字）'
-          }
-        },
-        required: ['username', 'email', 'password']
+          username: { type: 'string' },
+          email: { type: 'string' },
+          password: { type: 'string' },
+          phone_number: { type: 'string' }
+        }
       },
       response: {
         201: {
           type: 'object',
           properties: {
-            id: { type: 'integer' },
+            id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: ['string', 'null'] },
-            created_at: { type: 'string', format: 'date-time' },
-            updated_at: { type: 'string', format: 'date-time' }
-          }
-        },
-        400: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' }
+            phone_number: { type: 'string' },
+            role: { type: 'string' },
+            permissions: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            status: { type: 'string' },
+            last_login_at: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
           }
         }
-      }
-    }
-  }, async (request, reply) => {
+      },
+      security: [{ bearerAuth: [] }]
+    },
+    preHandler: fastify.adminAuth(['user_management'])
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = await userService.createUser(request.body);
-      return reply.status(201).send(user);
+      const user = await userService.createUser((request as any).body);
+      reply.code(201).send(user);
     } catch (error: any) {
-      return reply.status(400).send({
-        success: false,
-        message: error.message || '创建用户失败'
-      });
+      reply.code(400).send({ error: error.message });
     }
   });
 
-  // 更新用户
-  fastify.put<{
-    Params: { id: string },
-    Body: UpdateUserRequest,
-    Reply: SafeUser | { success: false, message: string }
-  }>('/users/:id', {
+  // 更新用户信息
+  fastify.put('/:id', {
     schema: {
-      description: '更新用户',
-      tags: ['管理端 - 用户管理'],
+      description: '更新用户信息',
+      tags: ['管理端用户管理'],
       params: {
         type: 'object',
         properties: {
-          id: { type: 'string', pattern: '^[1-9]\\d*$', description: '用户ID' }
+          id: { type: 'number' }
         },
         required: ['id']
       },
       body: {
         type: 'object',
         properties: {
-          username: {
-            type: 'string',
-            minLength: 2,
-            maxLength: 50,
-            pattern: '^[a-zA-Z0-9_\\u4e00-\\u9fa5]+$',
-            description: '用户名（2-50个字符，支持中文、英文、数字、下划线）'
-          },
-          email: {
-            type: 'string',
-            format: 'email',
-            maxLength: 100,
-            description: '邮箱地址'
-          },
-          password: {
-            type: 'string',
-            minLength: 6,
-            maxLength: 50,
-            description: '密码（6-50个字符）'
-          },
-          phone_number: {
-            type: ['string', 'null'],
-            pattern: '^[1-9]\\d{10}$',
-            description: '手机号（11位数字，传null可清空）'
-          }
-        },
-        additionalProperties: false
+          username: { type: 'string' },
+          email: { type: 'string' },
+          password: { type: 'string' },
+          phone_number: { type: 'string' },
+          role: { type: 'string', enum: ['user', 'admin'] },
+          status: { type: 'string', enum: ['active', 'inactive', 'suspended'] }
+        }
       },
       response: {
         200: {
           type: 'object',
           properties: {
-            id: { type: 'integer' },
+            id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: ['string', 'null'] },
-            created_at: { type: 'string', format: 'date-time' },
-            updated_at: { type: 'string', format: 'date-time' }
-          }
-        },
-        400: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' }
-          }
-        },
-        404: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' }
+            phone_number: { type: 'string' },
+            role: { type: 'string' },
+            permissions: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            status: { type: 'string' },
+            last_login_at: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
           }
         }
-      }
-    }
-  }, async (request, reply) => {
+      },
+      security: [{ bearerAuth: [] }]
+    },
+    preHandler: fastify.adminAuth(['user_management'])
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const userId = parseInt(request.params.id);
-      const user = await userService.updateUser(userId, request.body);
+      const { id } = (request as any).params;
+      const updatedUser = await userService.updateUser(id, (request as any).body);
 
-      if (!user) {
-        return reply.status(404).send({
-          success: false,
-          message: '用户不存在'
+      if (!updatedUser) {
+        return reply.code(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'User not found'
         });
       }
 
-      return reply.send(user);
+      reply.send(updatedUser);
     } catch (error: any) {
-      return reply.status(400).send({
-        success: false,
-        message: error.message || '更新用户失败'
-      });
+      reply.code(400).send({ error: error.message });
     }
   });
 
   // 删除用户
-  fastify.delete<{
-    Params: { id: string },
-    Reply: { success: boolean, message: string }
-  }>('/users/:id', {
+  fastify.delete('/:id', {
     schema: {
       description: '删除用户',
-      tags: ['管理端 - 用户管理'],
+      tags: ['管理端用户管理'],
       params: {
         type: 'object',
         properties: {
-          id: { type: 'string', pattern: '^[1-9]\\d*$', description: '用户ID' }
+          id: { type: 'number' }
         },
         required: ['id']
       },
@@ -323,154 +256,30 @@ async function adminUserRoutes(fastify: FastifyInstance) {
             success: { type: 'boolean' },
             message: { type: 'string' }
           }
-        },
-        404: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' }
-          }
         }
-      }
-    }
-  }, async (request, reply) => {
+      },
+      security: [{ bearerAuth: [] }]
+    },
+    preHandler: fastify.adminAuth(['user_management'])
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const userId = parseInt(request.params.id);
-      const deleted = await userService.deleteUser(userId);
+      const { id } = (request as any).params;
+      const success = await userService.deleteUser(id);
 
-      if (!deleted) {
-        return reply.status(404).send({
-          success: false,
-          message: '用户不存在'
+      if (!success) {
+        return reply.code(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'User not found'
         });
       }
 
-      return reply.send({
+      reply.send({
         success: true,
-        message: '用户删除成功'
+        message: 'User deleted successfully'
       });
     } catch (error: any) {
-      return reply.status(500).send({
-        success: false,
-        message: '删除用户失败'
-      });
-    }
-  });
-
-  // 检查用户名是否存在
-  fastify.get<{
-    Querystring: { username: string, excludeId?: string },
-    Reply: { exists: boolean } | { success: false, message: string }
-  }>('/users/check/username', {
-    schema: {
-      description: '检查用户名是否存在',
-      tags: ['管理端 - 用户管理'],
-      querystring: {
-        type: 'object',
-        properties: {
-          username: { type: 'string', description: '用户名' },
-          excludeId: { type: 'string', description: '排除的用户ID（更新时使用）' }
-        },
-        required: ['username']
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            exists: { type: 'boolean' }
-          }
-        }
-      }
-    }
-  }, async (request, reply) => {
-    try {
-      const { username, excludeId } = request.query;
-      const exists = await userService.isUsernameExists(username, excludeId ? parseInt(excludeId) : undefined);
-
-      return reply.send({ exists });
-    } catch (error: any) {
-      return reply.status(500).send({
-        success: false,
-        message: '检查用户名失败'
-      });
-    }
-  });
-
-  // 检查邮箱是否存在
-  fastify.get<{
-    Querystring: { email: string, excludeId?: string },
-    Reply: { exists: boolean } | { success: false, message: string }
-  }>('/users/check/email', {
-    schema: {
-      description: '检查邮箱是否存在',
-      tags: ['管理端 - 用户管理'],
-      querystring: {
-        type: 'object',
-        properties: {
-          email: { type: 'string', format: 'email', description: '邮箱' },
-          excludeId: { type: 'string', description: '排除的用户ID（更新时使用）' }
-        },
-        required: ['email']
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            exists: { type: 'boolean' }
-          }
-        }
-      }
-    }
-  }, async (request, reply) => {
-    try {
-      const { email, excludeId } = request.query;
-      const exists = await userService.isEmailExists(email, excludeId ? parseInt(excludeId) : undefined);
-
-      return reply.send({ exists });
-    } catch (error: any) {
-      return reply.status(500).send({
-        success: false,
-        message: '检查邮箱失败'
-      });
-    }
-  });
-
-  // 检查手机号是否存在
-  fastify.get<{
-    Querystring: { phone_number: string, excludeId?: string },
-    Reply: { exists: boolean } | { success: false, message: string }
-  }>('/users/check/phone', {
-    schema: {
-      description: '检查手机号是否存在',
-      tags: ['管理端 - 用户管理'],
-      querystring: {
-        type: 'object',
-        properties: {
-          phone_number: { type: 'string', description: '手机号' },
-          excludeId: { type: 'string', description: '排除的用户ID（更新时使用）' }
-        },
-        required: ['phone_number']
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            exists: { type: 'boolean' }
-          }
-        }
-      }
-    }
-  }, async (request, reply) => {
-    try {
-      const { phone_number, excludeId } = request.query;
-      const exists = await userService.isPhoneNumberExists(phone_number, excludeId ? parseInt(excludeId) : undefined);
-
-      return reply.send({ exists });
-    } catch (error: any) {
-      return reply.status(500).send({
-        success: false,
-        message: '检查手机号失败'
-      });
+      reply.code(500).send({ error: error.message });
     }
   });
 }

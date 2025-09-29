@@ -5,6 +5,10 @@ export interface User {
   email: string;
   password: string;
   phone_number?: string;
+  role: string;
+  permissions: string[];
+  status: string;
+  last_login_at?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -47,6 +51,10 @@ export interface SafeUser {
   username: string;
   email: string;
   phone_number?: string;
+  role: string;
+  permissions: string[];
+  status: string;
+  last_login_at?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -65,6 +73,14 @@ export interface UpdateUserRequest {
   email?: string;
   password?: string;
   phone_number?: string;
+  role?: string;
+  permissions?: string[];
+  status?: string;
+}
+
+// 用户角色修改请求体接口
+export interface UpdateUserRoleRequest {
+  role: 'user' | 'admin';
 }
 
 // 用户管理 - 用户列表查询接口

@@ -31,15 +31,20 @@ class AuthService {
       
       // 插入新用户到数据库
       const result = await client.query(
-        'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *',
-        [userData.username, userData.email, hashedPassword]
+        'INSERT INTO users (username, email, password, role, permissions, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [userData.username, userData.email, hashedPassword, 'user', ['user_access'], 'active']
       );
-      
+
       const user: User = {
         id: result.rows[0].id,
         username: result.rows[0].username,
         email: result.rows[0].email,
         password: result.rows[0].password,
+        phone_number: result.rows[0].phone_number,
+        role: result.rows[0].role || 'user',
+        permissions: result.rows[0].permissions || ['user_access'],
+        status: result.rows[0].status || 'active',
+        last_login_at: result.rows[0].last_login_at,
         created_at: result.rows[0].created_at,
         updated_at: result.rows[0].updated_at
       };
@@ -77,16 +82,20 @@ class AuthService {
       
       // 插入新用户到数据库
       const result = await client.query(
-        'INSERT INTO users (username, email, password, phone_number) VALUES ($1, $2, $3, $4) RETURNING *',
-        [userData.username, `${userData.phoneNumber}@sms.local`, hashedPassword, userData.phoneNumber]
+        'INSERT INTO users (username, email, password, phone_number, role, permissions, status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [userData.username, `${userData.phoneNumber}@sms.local`, hashedPassword, userData.phoneNumber, 'user', ['user_access'], 'active']
       );
-      
+
       const user: User = {
         id: result.rows[0].id,
         username: result.rows[0].username,
         email: result.rows[0].email,
         password: result.rows[0].password,
         phone_number: result.rows[0].phone_number,
+        role: result.rows[0].role || 'user',
+        permissions: result.rows[0].permissions || ['user_access'],
+        status: result.rows[0].status || 'active',
+        last_login_at: result.rows[0].last_login_at,
         created_at: result.rows[0].created_at,
         updated_at: result.rows[0].updated_at
       };
@@ -116,10 +125,21 @@ class AuthService {
     if (!isPasswordValid) {
       throw new Error('密码错误');
     }
-    
+
+    // 更新最后登录时间
+    const client = await pool.connect();
+    try {
+      await client.query(
+        'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [user.id]
+      );
+    } finally {
+      client.release();
+    }
+
     // 生成JWT令牌
     const token = jwt.sign(
-      { userId: user.id, username: user.username },
+      { userId: user.id, username: user.username, role: user.role },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
     );
@@ -145,10 +165,21 @@ class AuthService {
     if (!user) {
       throw new Error('用户不存在');
     }
-    
+
+    // 更新最后登录时间
+    const client = await pool.connect();
+    try {
+      await client.query(
+        'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [user.id]
+      );
+    } finally {
+      client.release();
+    }
+
     // 生成JWT令牌
     const token = jwt.sign(
-      { userId: user.id, username: user.username },
+      { userId: user.id, username: user.username, role: user.role },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
     );

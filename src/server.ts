@@ -1,6 +1,7 @@
 import fastify from 'fastify';
 import config from './config/index.js';
 import jwtPlugin from './plugins/jwt.js';
+import authPlugin from './plugins/auth.js';
 import registerRoutes from './routes/index.js';
 
 // 创建Fastify实例
@@ -42,6 +43,9 @@ await app.register(import('@fastify/swagger-ui'), {
 
 // 注册JWT插件
 await app.register(jwtPlugin);
+
+// 注册认证插件
+await app.register(authPlugin);
 
 // 注册路由
 app.register(registerRoutes);
