@@ -47,6 +47,9 @@ await app.register(jwtPlugin);
 // 注册认证插件
 await app.register(authPlugin);
 
+// 注册multipart插件（用于文件上传）
+await app.register(import('@fastify/multipart'));
+
 // 注册路由
 app.register(registerRoutes);
 

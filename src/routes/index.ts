@@ -7,6 +7,7 @@ import userProductRoutes from '../modules/product/user-routes.js';
 import adminProductRoutes from '../modules/product/admin-routes.js';
 import userStoreRoutes from '../modules/store/user-routes.js';
 import adminStoreRoutes from '../modules/store/admin-routes.js';
+import storageRoutes from '../modules/storage/routes.js';
 
 /**
  * 注册所有路由
@@ -36,6 +37,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册管理端店铺路由
   fastify.register(adminStoreRoutes, { prefix: '/api/admin/stores' });
+
+  // 注册存储管理路由
+  fastify.register(storageRoutes, { prefix: '/api/admin/storage' });
 }
 
 export default registerRoutes;

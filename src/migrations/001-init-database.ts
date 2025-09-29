@@ -295,6 +295,37 @@ export const up = async (): Promise<void> => {
       ON CONFLICT (config_key) DO NOTHING;
     `);
 
+    // 插入默认存储配置 - 阿里云OSS（未配置状态）
+    await client.query(`
+      INSERT INTO config (config_key, config_value, description)
+      VALUES
+        ('storage_aliyun_oss_status', 'inactive', '阿里云OSS存储状态'),
+        ('storage_aliyun_oss_is_default', 'false', '是否为默认存储'),
+        ('storage_aliyun_oss_access_key_id', '', '阿里云OSS访问密钥ID'),
+        ('storage_aliyun_oss_access_key_secret', '', '阿里云OSS访问密钥密码'),
+        ('storage_aliyun_oss_region', 'oss-cn-hangzhou', 'OSS区域'),
+        ('storage_aliyun_oss_bucket', '', 'OSS存储桶名称'),
+        ('storage_aliyun_oss_endpoint', '', 'OSS自定义域名'),
+        ('storage_aliyun_oss_internal', 'false', '是否使用内网访问'),
+        ('storage_aliyun_oss_secure', 'true', '是否使用HTTPS'),
+        ('storage_aliyun_oss_timeout', '60000', '请求超时时间(毫秒)')
+      ON CONFLICT (config_key) DO NOTHING;
+    `);
+
+    // 插入默认存储配置 - 本地存储（默认启用）
+    await client.query(`
+      INSERT INTO config (config_key, config_value, description)
+      VALUES
+        ('storage_local_status', 'active', '本地存储状态'),
+        ('storage_local_is_default', 'true', '是否为默认存储'),
+        ('storage_local_upload_path', './uploads', '本地存储上传路径'),
+        ('storage_local_max_file_size', '52428800', '最大文件大小(字节) - 50MB'),
+        ('storage_local_allowed_file_types', '[]', '允许的文件类型(JSON数组)'),
+        ('storage_local_enable_compression', 'true', '是否启用压缩'),
+        ('storage_local_compress_quality', '80', '压缩质量(1-100)')
+      ON CONFLICT (config_key) DO NOTHING;
+    `);
+
     console.log('✅ 数据库初始化完成');
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error);
