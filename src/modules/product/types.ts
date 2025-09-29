@@ -6,6 +6,7 @@ export interface Product {
   stock: number;
   category?: string;
   image_url?: string;
+  store_id?: number;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -18,6 +19,7 @@ export interface CreateProductRequest {
   stock: number;
   category?: string;
   image_url?: string;
+  store_id?: number;
   is_active?: boolean;
 }
 
@@ -28,6 +30,7 @@ export interface UpdateProductRequest {
   stock?: number;
   category?: string;
   image_url?: string;
+  store_id?: number;
   is_active?: boolean;
 }
 
@@ -35,6 +38,7 @@ export interface ProductListQuery {
   page?: number;
   limit?: number;
   category?: string;
+  store_id?: number;
   is_active?: boolean;
   search?: string;
   sort?: 'created_at' | 'price' | 'name';

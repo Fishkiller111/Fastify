@@ -17,6 +17,7 @@ export class ProductService {
         page = 1,
         limit = 10,
         category,
+        store_id,
         is_active = true,
         search,
         sort = 'created_at',
@@ -32,6 +33,12 @@ export class ProductService {
       if (category) {
         whereClause += ` AND category = $${paramIndex}`;
         params.push(category);
+        paramIndex++;
+      }
+
+      if (store_id) {
+        whereClause += ` AND store_id = $${paramIndex}`;
+        params.push(store_id);
         paramIndex++;
       }
 
@@ -97,14 +104,15 @@ export class ProductService {
         stock,
         category,
         image_url,
+        store_id,
         is_active = true
       } = productData;
 
       const result = await client.query(`
-        INSERT INTO products (name, description, price, stock, category, image_url, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO products (name, description, price, stock, category, image_url, store_id, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
-      `, [name, description, price, stock, category, image_url, is_active]);
+      `, [name, description, price, stock, category, image_url, store_id, is_active]);
 
       return result.rows[0];
     } finally {

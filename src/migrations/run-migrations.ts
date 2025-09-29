@@ -3,6 +3,7 @@ import { up as migrationUp2 } from './002-create-config-table.js';
 import { up as migrationUp3 } from './003-add-phone-number-to-users.js';
 import { up as migrationUp4 } from './004-create-products-table.js';
 import migration005 from './005-refactor-user-roles.js';
+import { up as migrationUp6 } from './006-create-stores-table.js';
 
 // 运行所有待处理的迁移
 async function runMigrations() {
@@ -13,6 +14,7 @@ async function runMigrations() {
     await migrationUp3();
     await migrationUp4();
     await migration005();
+    await migrationUp6();
     console.log('所有迁移已完成');
     process.exit(0);
   } catch (err: any) {

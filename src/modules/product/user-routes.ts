@@ -16,6 +16,7 @@ export default async function userProductRoutes(fastify: FastifyInstance) {
           page: { type: 'number', minimum: 1, default: 1 },
           limit: { type: 'number', minimum: 1, maximum: 50, default: 10 },
           category: { type: 'string' },
+          store_id: { type: 'number' },
           search: { type: 'string' },
           sort: { type: 'string', enum: ['created_at', 'price', 'name'], default: 'created_at' },
           order: { type: 'string', enum: ['asc', 'desc'], default: 'desc' }
@@ -41,6 +42,7 @@ export default async function userProductRoutes(fastify: FastifyInstance) {
                       stock: { type: 'number' },
                       category: { type: 'string' },
                       image_url: { type: 'string' },
+                      store_id: { type: 'number' },
                       created_at: { type: 'string' }
                     }
                   }

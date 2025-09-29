@@ -83,6 +83,7 @@ export default async function adminProductRoutes(fastify: FastifyInstance) {
           stock: { type: 'number', minimum: 0 },
           category: { type: 'string', maxLength: 100 },
           image_url: { type: 'string', format: 'uri' },
+          store_id: { type: 'number' },
           is_active: { type: 'boolean', default: true }
         },
         required: ['name', 'price', 'stock']
@@ -168,6 +169,7 @@ export default async function adminProductRoutes(fastify: FastifyInstance) {
           stock: { type: 'number', minimum: 0 },
           category: { type: 'string', maxLength: 100 },
           image_url: { type: 'string', format: 'uri' },
+          store_id: { type: 'number' },
           is_active: { type: 'boolean' }
         }
       }
