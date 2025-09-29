@@ -37,6 +37,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.post('/sessions', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: '创建新的Agent会话',
+      description: '为指定的Agent创建一个新的聊天会话',
       body: {
         type: 'object',
         required: ['agentId'],
@@ -107,6 +110,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.get('/sessions', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: '获取用户的所有会话',
+      description: '获取当前用户的所有Agent会话列表，可按Agent ID筛选',
       querystring: {
         type: 'object',
         properties: {
@@ -168,6 +174,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.get('/sessions/:sessionId', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: '获取会话详情',
+      description: '获取指定会话的详细信息',
       params: {
         type: 'object',
         required: ['sessionId'],
@@ -237,6 +246,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.put('/sessions/:sessionId', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: '更新会话信息',
+      description: '更新指定会话的标题或状态',
       params: {
         type: 'object',
         required: ['sessionId'],
@@ -314,6 +326,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.delete('/sessions/:sessionId', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: '删除会话',
+      description: '软删除指定的会话（标记为已删除状态）',
       params: {
         type: 'object',
         required: ['sessionId'],
@@ -364,6 +379,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.get('/sessions/:sessionId/messages', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: '获取会话消息历史',
+      description: '获取指定会话的聊天消息记录，支持分页',
       params: {
         type: 'object',
         required: ['sessionId'],
@@ -444,6 +462,9 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
   fastify.post('/sessions/:sessionId/chat', {
     preHandler: verifyJWT,
     schema: {
+      tags: ['ai-session'],
+      summary: 'Streaming聊天接口',
+      description: '与Agent进行实时流式对话，返回Server-Sent Events格式的响应',
       params: {
         type: 'object',
         required: ['sessionId'],
@@ -526,7 +547,7 @@ export default async function sessionRoutes(fastify: FastifyInstance) {
 
       try {
         // 使用Mastra服务进行实际的Agent交互
-        const mastraAgent = mastraService.createAgent(agent);
+        const mastraAgent = await mastraService.createAgent(agent);
         const streamIterator = await mastraService.streamChat(mastraAgent, body.content, {
           sessionId,
           temperature: agent.modelSettings.temperature,

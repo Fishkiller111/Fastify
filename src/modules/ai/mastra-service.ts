@@ -3,7 +3,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import config from '../../config/index.js';
+import { aiConfigService } from './config-service.js';
 import type {
   MastraAgentConfig,
   AIConfig,
@@ -11,16 +11,12 @@ import type {
 } from './types.js';
 
 export class MastraService {
-  private aiConfig: AIConfig;
-
-  constructor() {
-    this.aiConfig = config.ai;
-  }
+  // 移除缓存配置，改为实时从config表读取
 
   // 创建Mastra Agent实例
-  createAgent(agentConfig: MastraAgentConfig): Agent {
+  async createAgent(agentConfig: MastraAgentConfig): Promise<Agent> {
     // 根据配置选择模型
-    const model = this.getModel(agentConfig.aiProvider, agentConfig.model);
+    const model = await this.getModel(agentConfig.aiProvider, agentConfig.model);
 
     // 创建工具集
     const tools = this.createTools(agentConfig.tools);
@@ -37,12 +33,25 @@ export class MastraService {
   }
 
   // 获取模型提供商
-  private getModel(provider: string, modelName: string) {
+  private async getModel(provider: string, modelName: string) {
+    // 从配置表获取AI配置
+    const aiConfig = await aiConfigService.getAIConfig();
+
     switch (provider) {
       case 'openai':
+        // 临时设置环境变量供AI SDK使用
+        process.env.OPENAI_API_KEY = aiConfig.openai.apiKey;
+        if (aiConfig.openai.baseUrl) {
+          process.env.OPENAI_BASE_URL = aiConfig.openai.baseUrl;
+        }
         return openai(modelName as any);
 
       case 'claude':
+        // 临时设置环境变量供AI SDK使用
+        process.env.ANTHROPIC_API_KEY = aiConfig.claude.apiKey;
+        if (aiConfig.claude.baseUrl) {
+          process.env.ANTHROPIC_BASE_URL = aiConfig.claude.baseUrl;
+        }
         return anthropic(modelName as any);
 
       default:
