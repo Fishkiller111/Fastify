@@ -34,7 +34,9 @@ async function adminUserRoutes(fastify: FastifyInstance) {
                   id: { type: 'number' },
                   username: { type: 'string' },
                   email: { type: 'string' },
-                  phone_number: { type: 'string' },
+                  phone_number: { type: 'string', nullable: true },
+                  wallet_address: { type: 'string', nullable: true },
+                  balance: { type: 'string', nullable: true },
                   role: { type: 'string' },
                   permissions: {
                     type: 'array',
@@ -90,7 +92,9 @@ async function adminUserRoutes(fastify: FastifyInstance) {
             id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: 'string' },
+            phone_number: { type: 'string', nullable: true },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             role: { type: 'string' },
             permissions: {
               type: 'array',
@@ -137,7 +141,9 @@ async function adminUserRoutes(fastify: FastifyInstance) {
           username: { type: 'string' },
           email: { type: 'string' },
           password: { type: 'string' },
-          phone_number: { type: 'string' }
+          phone_number: { type: 'string' },
+          wallet_address: { type: 'string' },
+          balance: { type: 'string' }
         }
       },
       response: {
@@ -147,7 +153,9 @@ async function adminUserRoutes(fastify: FastifyInstance) {
             id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: 'string' },
+            phone_number: { type: 'string', nullable: true },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             role: { type: 'string' },
             permissions: {
               type: 'array',
@@ -191,6 +199,8 @@ async function adminUserRoutes(fastify: FastifyInstance) {
           email: { type: 'string' },
           password: { type: 'string' },
           phone_number: { type: 'string' },
+          wallet_address: { type: 'string' },
+          balance: { type: 'string' },
           role: { type: 'string', enum: ['user', 'admin'] },
           status: { type: 'string', enum: ['active', 'inactive', 'suspended'] }
         }
@@ -202,7 +212,9 @@ async function adminUserRoutes(fastify: FastifyInstance) {
             id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: 'string' },
+            phone_number: { type: 'string', nullable: true },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             role: { type: 'string' },
             permissions: {
               type: 'array',

@@ -30,7 +30,7 @@ async function loginConfigRoutes(fastify: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            method: { type: 'string', enum: ['email', 'sms', 'both'] },
+            method: { type: 'string', enum: ['email', 'sms', 'both', 'wallet'] },
             aliCloudAccessKeyId: { type: 'string' },
             aliCloudAccessKeySecret: { type: 'string' },
             aliCloudSignName: { type: 'string' },
@@ -66,7 +66,7 @@ async function loginConfigRoutes(fastify: FastifyInstance) {
         type: 'object',
         required: ['method'],
         properties: {
-          method: { type: 'string', enum: ['email', 'sms', 'both'] }
+          method: { type: 'string', enum: ['email', 'sms', 'both', 'wallet'] }
         }
       },
       response: {
@@ -98,7 +98,7 @@ async function loginConfigRoutes(fastify: FastifyInstance) {
       const { method } = request.body;
       
       // 验证登录方式
-      if (method !== LoginMethod.EMAIL && method !== LoginMethod.SMS && method !== LoginMethod.BOTH) {
+      if (method !== LoginMethod.EMAIL && method !== LoginMethod.SMS && method !== LoginMethod.BOTH && method !== LoginMethod.WALLET) {
         return reply.status(400).send({
           success: false,
           message: '无效的登录方式'

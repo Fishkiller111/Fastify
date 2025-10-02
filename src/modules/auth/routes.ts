@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { RegisterRequest, LoginRequest, SMSRegisterRequest, SMSLoginRequest, CreateUserRequest } from './types.js';
+import { RegisterRequest, LoginRequest, SMSRegisterRequest, SMSLoginRequest, WalletLoginRequest, CreateUserRequest } from './types.js';
 import AuthService from './service.js';
 import { getLoginConfig, LoginMethod } from './login-config.js';
 import loginConfigRoutes from './config-routes.js';
@@ -33,6 +33,8 @@ async function authRoutes(fastify: FastifyInstance) {
             id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             created_at: { type: 'string' },
             updated_at: { type: 'string' }
           }
@@ -70,6 +72,8 @@ async function authRoutes(fastify: FastifyInstance) {
             username: { type: 'string' },
             email: { type: 'string' },
             phone_number: { type: 'string' },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             created_at: { type: 'string' },
             updated_at: { type: 'string' }
           }
@@ -108,6 +112,8 @@ async function authRoutes(fastify: FastifyInstance) {
                 id: { type: 'number' },
                 username: { type: 'string' },
                 email: { type: 'string' },
+                wallet_address: { type: 'string', nullable: true },
+                balance: { type: 'string', nullable: true },
                 created_at: { type: 'string' },
                 updated_at: { type: 'string' }
               }
@@ -150,6 +156,8 @@ async function authRoutes(fastify: FastifyInstance) {
                 username: { type: 'string' },
                 email: { type: 'string' },
                 phone_number: { type: 'string' },
+                wallet_address: { type: 'string', nullable: true },
+                balance: { type: 'string', nullable: true },
                 created_at: { type: 'string' },
                 updated_at: { type: 'string' }
               }
@@ -167,7 +175,51 @@ async function authRoutes(fastify: FastifyInstance) {
       reply.code(400).send({ error: error.message });
     }
   });
-  
+
+  // 登录路由（钱包方式）
+  fastify.post('/login/wallet', {
+    schema: {
+      description: '用户登录（钱包方式）',
+      tags: ['认证'],
+      body: {
+        type: 'object',
+        required: ['walletAddress'],
+        properties: {
+          walletAddress: { type: 'string' },
+          balance: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'number' },
+                username: { type: 'string' },
+                email: { type: 'string' },
+                phone_number: { type: 'string', nullable: true },
+                wallet_address: { type: 'string' },
+                balance: { type: 'string' },
+                created_at: { type: 'string' },
+                updated_at: { type: 'string' }
+              }
+            },
+            token: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request: FastifyRequest<{ Body: WalletLoginRequest }>, reply: FastifyReply) => {
+    try {
+      const { user, token } = await AuthService.loginWithWallet(request.body);
+      reply.send({ user, token });
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 通用注册路由（根据配置选择登录方式）
   fastify.post('/register', {
     schema: {
@@ -175,13 +227,15 @@ async function authRoutes(fastify: FastifyInstance) {
       tags: ['认证'],
       body: {
         type: 'object',
-        required: ['username'],
+        required: [],
         properties: {
           username: { type: 'string' },
           email: { type: 'string' },
           password: { type: 'string' },
           phoneNumber: { type: 'string' },
-          code: { type: 'string' }
+          code: { type: 'string' },
+          walletAddress: { type: 'string' },
+          balance: { type: 'string' }
         }
       },
       response: {
@@ -192,13 +246,15 @@ async function authRoutes(fastify: FastifyInstance) {
             username: { type: 'string' },
             email: { type: 'string' },
             phone_number: { type: 'string' },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             created_at: { type: 'string' },
             updated_at: { type: 'string' }
           }
         }
       }
     }
-  }, async (request: FastifyRequest<{ Body: RegisterRequest | SMSRegisterRequest }>, reply: FastifyReply) => {
+  }, async (request: FastifyRequest<{ Body: RegisterRequest | SMSRegisterRequest | WalletLoginRequest }>, reply: FastifyReply) => {
     try {
       const user = await AuthService.register(request.body);
       reply.code(201).send(user);
@@ -233,6 +289,8 @@ async function authRoutes(fastify: FastifyInstance) {
                 username: { type: 'string' },
                 email: { type: 'string' },
                 phone_number: { type: 'string' },
+                wallet_address: { type: 'string', nullable: true },
+                balance: { type: 'string', nullable: true },
                 created_at: { type: 'string' },
                 updated_at: { type: 'string' }
               }
@@ -242,7 +300,7 @@ async function authRoutes(fastify: FastifyInstance) {
         }
       }
     }
-  }, async (request: FastifyRequest<{ Body: LoginRequest | SMSLoginRequest }>, reply: FastifyReply) => {
+  }, async (request: FastifyRequest<{ Body: LoginRequest | SMSLoginRequest | WalletLoginRequest }>, reply: FastifyReply) => {
     try {
       const { user, token } = await AuthService.login(request.body);
       reply.send({ user, token });
@@ -274,6 +332,8 @@ async function authRoutes(fastify: FastifyInstance) {
             username: { type: 'string' },
             email: { type: 'string' },
             phone_number: { type: 'string' },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             role: { type: 'string' },
             permissions: {
               type: 'array',
@@ -319,6 +379,8 @@ async function authRoutes(fastify: FastifyInstance) {
                 username: { type: 'string' },
                 email: { type: 'string' },
                 phone_number: { type: 'string' },
+                wallet_address: { type: 'string', nullable: true },
+                balance: { type: 'string', nullable: true },
                 role: { type: 'string' },
                 permissions: {
                   type: 'array',

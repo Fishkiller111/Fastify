@@ -32,7 +32,9 @@ async function userRoutes(fastify: FastifyInstance) {
             id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: 'string' },
+            phone_number: { type: 'string', nullable: true },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             created_at: { type: 'string' },
             updated_at: { type: 'string' }
           }
@@ -65,6 +67,8 @@ async function userRoutes(fastify: FastifyInstance) {
         username: user.username,
         email: user.email,
         phone_number: user.phone_number,
+        wallet_address: user.wallet_address,
+        balance: user.balance,
         created_at: user.created_at,
         updated_at: user.updated_at
       });
@@ -100,7 +104,9 @@ async function userRoutes(fastify: FastifyInstance) {
             id: { type: 'number' },
             username: { type: 'string' },
             email: { type: 'string' },
-            phone_number: { type: 'string' },
+            phone_number: { type: 'string', nullable: true },
+            wallet_address: { type: 'string', nullable: true },
+            balance: { type: 'string', nullable: true },
             role: { type: 'string' },
             permissions: {
               type: 'array',

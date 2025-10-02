@@ -28,6 +28,8 @@ class UserService {
         email: row.email,
         password: row.password,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role || 'user',
         permissions: row.permissions || ['user_access'],
         status: row.status || 'active',
@@ -64,6 +66,8 @@ class UserService {
         email: row.email,
         password: row.password,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role || 'user',
         permissions: row.permissions || ['user_access'],
         status: row.status || 'active',
@@ -100,6 +104,47 @@ class UserService {
         email: row.email,
         password: row.password,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
+        role: row.role || 'user',
+        permissions: row.permissions || ['user_access'],
+        status: row.status || 'active',
+        last_login_at: row.last_login_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+
+      return user;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 根据钱包地址获取用户信息
+   * @param walletAddress 钱包地址
+   * @returns 用户信息
+   */
+  async getUserByWalletAddress(walletAddress: string): Promise<User | null> {
+    const client = await pool.connect();
+
+    try {
+      const normalizedAddress = walletAddress.toLowerCase();
+      const result = await client.query('SELECT * FROM users WHERE wallet_address = $1', [normalizedAddress]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      const user: User = {
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        password: row.password,
+        phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role || 'user',
         permissions: row.permissions || ['user_access'],
         status: row.status || 'active',
@@ -135,7 +180,7 @@ class UserService {
       let queryParams: any[] = [];
 
       if (search) {
-        whereClause = `WHERE username ILIKE $1 OR email ILIKE $1 OR phone_number ILIKE $1`;
+        whereClause = `WHERE username ILIKE $1 OR email ILIKE $1 OR phone_number ILIKE $1 OR wallet_address ILIKE $1`;
         queryParams.push(`%${search}%`);
       }
 
@@ -152,7 +197,7 @@ class UserService {
 
       // 查询用户数据（不包含密码）
       const userQuery = `
-        SELECT id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+        SELECT id, username, email, phone_number, wallet_address, balance, role, permissions, status, last_login_at, created_at, updated_at
         FROM users
         ${whereClause}
         ${orderClause}
@@ -166,6 +211,8 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role || 'user',
         permissions: row.permissions || ['user_access'],
         status: row.status || 'active',
@@ -198,7 +245,7 @@ class UserService {
 
     try {
       const result = await client.query(
-        'SELECT id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at FROM users WHERE id = $1',
+        'SELECT id, username, email, phone_number, wallet_address, balance, role, permissions, status, last_login_at, created_at, updated_at FROM users WHERE id = $1',
         [id]
       );
 
@@ -212,6 +259,8 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role || 'user',
         permissions: row.permissions || ['user_access'],
         status: row.status || 'active',
@@ -255,14 +304,26 @@ class UserService {
         }
       }
 
+      // 检查钱包地址是否已存在（如果提供了钱包地址）
+      let normalizedWallet: string | null = null;
+      if (userData.wallet_address) {
+        normalizedWallet = userData.wallet_address.toLowerCase();
+        const walletCheck = await client.query('SELECT id FROM users WHERE wallet_address = $1', [normalizedWallet]);
+        if (walletCheck.rows.length > 0) {
+          throw new Error('钱包地址已存在');
+        }
+      }
+
+      const balanceValue = userData.balance !== undefined ? userData.balance.toString() : null;
+
       // 加密密码
       const hashedPassword = await bcrypt.hash(userData.password, 10);
 
       // 插入用户数据
       const insertQuery = `
-        INSERT INTO users (username, email, password, phone_number, role, permissions, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+        INSERT INTO users (username, email, password, phone_number, wallet_address, balance, role, permissions, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, username, email, phone_number, wallet_address, balance, role, permissions, status, last_login_at, created_at, updated_at
       `;
 
       const result = await client.query(insertQuery, [
@@ -270,6 +331,8 @@ class UserService {
         userData.email,
         hashedPassword,
         userData.phone_number || null,
+        normalizedWallet,
+        balanceValue,
         'user',
         ['user_access'],
         'active'
@@ -283,6 +346,8 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role,
         permissions: row.permissions,
         status: row.status,
@@ -359,6 +424,25 @@ class UserService {
         values.push(userData.phone_number || null);
       }
 
+      if (userData.wallet_address !== undefined) {
+        let normalizedWallet: string | null = null;
+        if (userData.wallet_address) {
+          normalizedWallet = userData.wallet_address.toLowerCase();
+          const walletCheck = await client.query('SELECT id FROM users WHERE wallet_address = $1 AND id != $2', [normalizedWallet, id]);
+          if (walletCheck.rows.length > 0) {
+            throw new Error('钱包地址已存在');
+          }
+        }
+        updates.push(`wallet_address = $${paramIndex++}`);
+        values.push(normalizedWallet);
+      }
+
+      if (userData.balance !== undefined) {
+        const normalizedBalance = userData.balance !== undefined ? userData.balance.toString() : null;
+        updates.push(`balance = $${paramIndex++}`);
+        values.push(normalizedBalance);
+      }
+
       if (userData.role !== undefined) {
         updates.push(`role = $${paramIndex++}`);
         values.push(userData.role);
@@ -388,7 +472,7 @@ class UserService {
         UPDATE users
         SET ${updates.join(', ')}
         WHERE id = $${paramIndex}
-        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+        RETURNING id, username, email, phone_number, wallet_address, balance, role, permissions, status, last_login_at, created_at, updated_at
       `;
 
       const result = await client.query(updateQuery, values);
@@ -401,6 +485,8 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role,
         permissions: row.permissions,
         status: row.status,
@@ -441,7 +527,7 @@ class UserService {
         UPDATE users
         SET role = $1, permissions = $2, updated_at = CURRENT_TIMESTAMP
         WHERE id = $3
-        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+        RETURNING id, username, email, phone_number, wallet_address, balance, role, permissions, status, last_login_at, created_at, updated_at
       `;
 
       const result = await client.query(updateQuery, [roleData.role, defaultPermissions, id]);
@@ -454,6 +540,8 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role,
         permissions: row.permissions,
         status: row.status,
@@ -516,14 +604,26 @@ class UserService {
         }
       }
 
+      // 检查钱包地址是否已存在（如果提供了钱包地址）
+      let normalizedWallet: string | null = null;
+      if (userData.wallet_address) {
+        normalizedWallet = userData.wallet_address.toLowerCase();
+        const walletCheck = await client.query('SELECT id FROM users WHERE wallet_address = $1', [normalizedWallet]);
+        if (walletCheck.rows.length > 0) {
+          throw new Error('钱包地址已存在');
+        }
+      }
+
+      const balanceValue = userData.balance !== undefined ? userData.balance.toString() : null;
+
       // 加密密码
       const hashedPassword = await bcrypt.hash(userData.password, 10);
 
       // 插入管理员用户数据
       const insertQuery = `
-        INSERT INTO users (username, email, password, phone_number, role, permissions, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, username, email, phone_number, role, permissions, status, last_login_at, created_at, updated_at
+        INSERT INTO users (username, email, password, phone_number, wallet_address, balance, role, permissions, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, username, email, phone_number, wallet_address, balance, role, permissions, status, last_login_at, created_at, updated_at
       `;
 
       const result = await client.query(insertQuery, [
@@ -531,6 +631,8 @@ class UserService {
         userData.email,
         hashedPassword,
         userData.phone_number || null,
+        normalizedWallet,
+        balanceValue,
         'admin',
         ['admin_access', 'user_management'],
         'active'
@@ -544,6 +646,8 @@ class UserService {
         username: row.username,
         email: row.email,
         phone_number: row.phone_number,
+        wallet_address: row.wallet_address,
+        balance: row.balance,
         role: row.role,
         permissions: row.permissions,
         status: row.status,

@@ -5,6 +5,8 @@ export interface User {
   email: string;
   password: string;
   phone_number?: string;
+  wallet_address?: string;
+  balance?: string | null;
   role: string;
   permissions: string[];
   status: string;
@@ -39,6 +41,12 @@ export interface SMSLoginRequest {
   code: string;
 }
 
+// 钱包登录请求体接口
+export interface WalletLoginRequest {
+  walletAddress: string;
+  balance?: string | number;
+}
+
 // JWT载荷接口
 export interface JwtPayload {
   userId: number;
@@ -51,6 +59,8 @@ export interface SafeUser {
   username: string;
   email: string;
   phone_number?: string;
+  wallet_address?: string;
+  balance?: string | null;
   role: string;
   permissions: string[];
   status: string;
@@ -65,6 +75,8 @@ export interface CreateUserRequest {
   email: string;
   password: string;
   phone_number?: string;
+  wallet_address?: string;
+  balance?: string | number;
 }
 
 // 用户管理 - 更新用户请求体接口
@@ -73,6 +85,8 @@ export interface UpdateUserRequest {
   email?: string;
   password?: string;
   phone_number?: string;
+  wallet_address?: string | null;
+  balance?: string | number;
   role?: string;
   permissions?: string[];
   status?: string;

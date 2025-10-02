@@ -4,7 +4,8 @@ import { getConfigByKey, setConfig } from '../config/service.js';
 export enum LoginMethod {
   EMAIL = 'email',
   SMS = 'sms',
-  BOTH = 'both'
+  BOTH = 'both',
+  WALLET = 'wallet'
 }
 
 // 登录配置接口
@@ -20,12 +21,16 @@ export interface LoginConfig {
 export async function getLoginConfig(): Promise<LoginConfig> {
   // 获取登录方式
   const methodConfig = await getConfigByKey('login_method');
-  let method = LoginMethod.EMAIL; // 默认为邮箱登录
+  let method = LoginMethod.WALLET; // 默认为钱包登录
 
-  if (methodConfig?.value === LoginMethod.SMS) {
+  if (methodConfig?.value === LoginMethod.EMAIL) {
+    method = LoginMethod.EMAIL;
+  } else if (methodConfig?.value === LoginMethod.SMS) {
     method = LoginMethod.SMS;
   } else if (methodConfig?.value === LoginMethod.BOTH) {
     method = LoginMethod.BOTH;
+  } else if (methodConfig?.value === LoginMethod.WALLET) {
+    method = LoginMethod.WALLET;
   }
 
   // 如果是短信登录或两种都需要，获取阿里云配置
@@ -54,7 +59,7 @@ export async function setLoginMethod(method: LoginMethod): Promise<void> {
   await setConfig({
     key: 'login_method',
     value: method,
-    description: '登录方式配置 (email、sms 或 both)'
+    description: '登录方式配置 (email、sms、wallet 或 both)'
   });
 }
 
