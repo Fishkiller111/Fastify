@@ -7,6 +7,14 @@ import registerRoutes from './routes/index.js';
 // 创建Fastify实例
 const app = fastify({ logger: true });
 
+// 允许跨域访问（暂时放开所有域）
+await app.register(import('@fastify/cors'), {
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+});
+
 // 注册Swagger插件
 await app.register(import('@fastify/swagger'), {
   openapi: {
