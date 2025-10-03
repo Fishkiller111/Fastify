@@ -112,60 +112,6 @@ async function klineRoutes(fastify: FastifyInstance) {
       reply.code(400).send({ error: error.message });
     }
   });
-
-  // 初始化事件模拟数据（测试用）
-  fastify.post('/events/:eventId/mock', {
-    schema: {
-      description: '初始化事件模拟K线数据',
-      tags: ['K线'],
-      params: {
-        type: 'object',
-        required: ['eventId'],
-        properties: {
-          eventId: { type: 'number' },
-        },
-      },
-      querystring: {
-        type: 'object',
-        properties: {
-          interval: {
-            type: 'string',
-            enum: ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'],
-            default: '1m',
-          },
-          count: { type: 'number', default: 100 },
-        },
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            event_id: { type: 'number' },
-            count: { type: 'number' },
-          },
-        },
-      },
-    },
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { eventId } = request.params as { eventId: number };
-      const { interval = KlineInterval.ONE_MINUTE, count = 100 } = request.query as {
-        interval?: KlineInterval;
-        count?: number;
-      };
-
-      await EventKlineService.initMockEventData(eventId, interval, count);
-
-      reply.send({
-        message: '模拟数据初始化成功',
-        event_id: eventId,
-        count,
-      });
-    } catch (error: any) {
-      reply.code(400).send({ error: error.message });
-    }
-  });
 }
 
 export default klineRoutes;
