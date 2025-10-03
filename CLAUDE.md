@@ -47,10 +47,15 @@ Each module follows this structure:
 
 ### Key Architectural Components
 
-#### JWT Authentication
-- **Plugin Location**: `src/plugins/jwt.ts`
-- **Critical Note**: Due to Fastify's plugin encapsulation, JWT verification in routes must use direct `jsonwebtoken` library calls rather than `fastify.authenticate` decorator
-- **Pattern**: Routes import `jwt` and `config` directly for token verification
+#### JWT Authentication System
+- **JWT Plugin**: `src/plugins/jwt.ts` - Registers @fastify/jwt for token generation
+- **Auth Plugin**: `src/plugins/auth.ts` - Provides `userAuth()` and `adminAuth()` middleware decorators
+- **Critical Pattern**: Use `fastify.userAuth()` or `fastify.adminAuth()` in route `preHandler` hooks
+- **Implementation Details**:
+  - Middleware validates JWT, checks user status, and verifies permissions
+  - User info attached to `request.user` or `request.admin` after successful authentication
+  - Supports role-based access control (RBAC) with permission checking
+  - Admin routes require `role === 'admin'` in addition to valid JWT
 
 #### Database Layer
 - **Connection**: PostgreSQL with `pg` driver
@@ -58,10 +63,15 @@ Each module follows this structure:
 - **Migrations**: Located in `src/migrations/` with sequential numbering
 - **Pattern**: Services handle all database operations, routes handle HTTP concerns
 
-#### Module Registration
-1. **Server Setup**: `src/server.ts` registers plugins and routes
-2. **Route Registration**: `src/routes/index.ts` registers all module routes with prefixes
-3. **Plugin Order**: JWT plugin must be registered before routes that use authentication
+#### Module Registration & Plugin Order
+1. **Server Setup**: `src/server.ts` is the entry point
+2. **Plugin Registration Order** (critical):
+   - CORS plugin
+   - Swagger & Swagger UI plugins
+   - JWT plugin (`src/plugins/jwt.ts`)
+   - Auth plugin (`src/plugins/auth.ts`) - must come after JWT
+   - All route modules via `src/routes/index.ts`
+3. **Route Prefixes**: All API routes mounted under `/api/*` (e.g., `/api/auth`, `/api/user`, `/api/admin/users`)
 
 ### API Documentation
 - **Swagger UI**: Available at `/docs` when server is running
@@ -74,16 +84,36 @@ Each module follows this structure:
 - **Key Settings**: Database connection, JWT secret, server host/port
 
 ### Database Schema
-- **Users**: Authentication and profile data
-- **Config**: Application configuration storage
-- **Migrations**: Version-controlled schema changes
+- **Users**: Authentication, profile data, role-based access control (RBAC)
+  - Supports email, SMS, and wallet-based login
+  - Fields: email, phone, wallet_address, password, role, permissions, status
+- **Config**: Key-value storage for application configuration
+  - Used for login method configuration and third-party service credentials
+  - Examples: login_method, aliyun_sms_* settings
+- **Migrations**: Version-controlled schema changes with sequential numbering
 
 ## Important Implementation Notes
 
-### JWT Authentication Gotchas
-- **Do NOT use** `fastify.authenticate` decorator in routes - it won't work due to plugin encapsulation
-- **DO use** direct `jwt.verify()` calls with `config.jwt.secret` in route `preHandler` functions
-- **Pattern**: Import `jsonwebtoken` and verify tokens manually in each protected route
+### Authentication Usage Pattern
+```typescript
+// Protected route example
+fastify.get('/profile', {
+  preHandler: fastify.userAuth(), // Basic authentication
+  handler: async (request, reply) => {
+    const userId = (request as any).user.userId;
+    // Your logic here
+  }
+});
+
+// Admin route with permission check
+fastify.delete('/users/:id', {
+  preHandler: fastify.adminAuth(['user.delete']), // Admin + permission
+  handler: async (request, reply) => {
+    const adminId = (request as any).admin.userId;
+    // Your logic here
+  }
+});
+```
 
 ### ES Modules
 - All imports must use `.js` extensions even for TypeScript files
@@ -95,10 +125,23 @@ Each module follows this structure:
 - Each migration is numbered (001, 002, 003, etc.)
 - Migration runner tracks completed migrations to avoid re-execution
 
-### Error Handling
-- Routes should handle errors gracefully with appropriate HTTP status codes
-- Database errors should be caught and translated to user-friendly messages
-- JWT verification errors should return 401 with consistent error format
+### Multi-Login Strategy
+This API supports three authentication methods configured via the `config` table:
+- **Email + Password**: Traditional authentication with bcrypt hashing
+- **SMS Verification**: Uses Aliyun SMS service for OTP-based login
+- **Wallet Address**: Web3 wallet-based authentication (e.g., MetaMask)
+- **Hybrid**: Can enable multiple methods simultaneously
+
+**Configuration**: `src/modules/auth/login-config.ts` manages login method settings. Initialize with:
+```bash
+node dist/scripts/init-sms-config.js
+```
+
+### Error Handling Conventions
+- Authentication errors: `401` with `{ statusCode, error, message }` format
+- Permission errors: `403 Forbidden`
+- Validation errors: `400 Bad Request`
+- Database errors: Caught in services, translated to user-friendly messages
 
 ## Template Package Architecture
 
@@ -125,3 +168,13 @@ Variables in templates use `{{variableName}}` syntax and are replaced during pro
 - `{{authorName}}` and `{{authorEmail}}` - Author information
 - `{{databaseName}}` - Database name (auto-generated from project name)
 - `{{serverPort}}` - Server port configuration
+
+### Development Workflow for Template Changes
+When modifying the template for republishing:
+1. Make changes to source files in `src/`
+2. Update version in `package.json`
+3. Run `npm run build` to compile TypeScript
+4. Test locally with `npx . test-project` (from template directory)
+5. Publish with `npm publish` (runs `prepublishOnly` hook automatically)
+
+**Important**: Files listed in `package.json` `files` array are included in the npm package. The `bin/create-fastify-app.js` generator copies everything except items in `template.json` excludes list.

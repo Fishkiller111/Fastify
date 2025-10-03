@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K线图实时数据测试</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; }
+    .controls {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 5px;
+    }
+    button {
+      padding: 10px 20px;
+      margin-right: 10px;
+      margin-bottom: 10px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { background: #0056b3; }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.disconnected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    #klineData {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      background: #fafafa;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .kline-item {
+      padding: 5px;
+      margin: 2px 0;
+      background: white;
+      border-left: 3px solid #007bff;
+    }
+    .info {
+      background: #e7f3ff;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 K线图实时数据测试</h1>
+
+    <div class="info">
+      <strong>使用说明：</strong>
+      <ol>
+        <li>先点击"初始化测试数据"加载历史数据</li>
+        <li>点击"连接 WebSocket"建立实时连接</li>
+        <li>点击"订阅 K线数据"开始接收实时推送</li>
+        <li>点击"获取历史数据"查看 HTTP API 返回的数据</li>
+      </ol>
+    </div>
+
+    <div class="controls">
+      <button id="initData">初始化测试数据</button>
+      <button id="connectWS">连接 WebSocket</button>
+      <button id="disconnectWS" disabled>断开 WebSocket</button>
+      <button id="subscribe" disabled>订阅 K线数据</button>
+      <button id="unsubscribe" disabled>取消订阅</button>
+      <button id="getHistory">获取历史数据</button>
+    </div>
+
+    <div id="status" class="status disconnected">
+      状态：未连接
+    </div>
+
+    <h3>实时数据流：</h3>
+    <div id="klineData"></div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000';
+    const WS_URL = 'ws://localhost:3000/api/kline/stream';
+
+    let ws = null;
+    let isSubscribed = false;
+
+    const $initData = document.getElementById('initData');
+    const $connectWS = document.getElementById('connectWS');
+    const $disconnectWS = document.getElementById('disconnectWS');
+    const $subscribe = document.getElementById('subscribe');
+    const $unsubscribe = document.getElementById('unsubscribe');
+    const $getHistory = document.getElementById('getHistory');
+    const $status = document.getElementById('status');
+    const $klineData = document.getElementById('klineData');
+
+    // 初始化测试数据
+    $initData.addEventListener('click', async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/kline/init-mock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: 'BTC/USDT',
+            interval: '1m',
+            count: 100
+          })
+        });
+        const data = await response.json();
+        addLog('✅ ' + data.message, 'success');
+      } catch (err) {
+        addLog('❌ 初始化失败: ' + err.message, 'error');
+      }
+    });
+
+    // 连接 WebSocket
+    $connectWS.addEventListener('click', () => {
+      if (ws) return;
+
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        updateStatus('connected');
+        addLog('✅ WebSocket 已连接');
+        $connectWS.disabled = true;
+        $disconnectWS.disabled = false;
+        $subscribe.disabled = false;
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === 'subscribed') {
+          addLog(`✅ 已订阅: ${msg.symbol} ${msg.interval}`);
+          isSubscribed = true;
+          $subscribe.disabled = true;
+          $unsubscribe.disabled = false;
+        } else if (msg.type === 'unsubscribed') {
+          addLog(`⚠️ 已取消订阅: ${msg.symbol} ${msg.interval}`);
+          isSubscribed = false;
+          $subscribe.disabled = false;
+          $unsubscribe.disabled = true;
+        } else if (msg.type === 'kline') {
+          displayKline(msg.data);
+        }
+      };
+
+      ws.onclose = () => {
+        updateStatus('disconnected');
+        addLog('⚠️ WebSocket 已断开');
+        ws = null;
+        isSubscribed = false;
+        $connectWS.disabled = false;
+        $disconnectWS.disabled = true;
+        $subscribe.disabled = true;
+        $unsubscribe.disabled = true;
+      };
+
+      ws.onerror = (err) => {
+        addLog('❌ WebSocket 错误: ' + err);
+      };
+    });
+
+    // 断开 WebSocket
+    $disconnectWS.addEventListener('click', () => {
+      if (ws) {
+        ws.close();
+      }
+    });
+
+    // 订阅 K线数据
+    $subscribe.addEventListener('click', () => {
+      if (!ws) return;
+
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        symbol: 'BTC/USDT',
+        interval: '1m'
+      }));
+    });
+
+    // 取消订阅
+    $unsubscribe.addEventListener('click', () => {
+      if (!ws) return;
+
+      ws.send(JSON.stringify({
+        type: 'unsubscribe',
+        symbol: 'BTC/USDT',
+        interval: '1m'
+      }));
+    });
+
+    // 获取历史数据
+    $getHistory.addEventListener('click', async () => {
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/kline/history?symbol=BTC/USDT&interval=1m&limit=10`
+        );
+        const data = await response.json();
+        addLog(`📊 获取到 ${data.length} 条历史数据`);
+        data.forEach(kline => displayKline(kline));
+      } catch (err) {
+        addLog('❌ 获取历史数据失败: ' + err.message);
+      }
+    });
+
+    // 更新状态
+    function updateStatus(status) {
+      if (status === 'connected') {
+        $status.className = 'status connected';
+        $status.textContent = '状态：已连接';
+      } else {
+        $status.className = 'status disconnected';
+        $status.textContent = '状态：未连接';
+      }
+    }
+
+    // 添加日志
+    function addLog(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = 'kline-item';
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      $klineData.insertBefore(div, $klineData.firstChild);
+
+      // 限制显示数量
+      while ($klineData.children.length > 50) {
+        $klineData.removeChild($klineData.lastChild);
+      }
+    }
+
+    // 显示 K线数据
+    function displayKline(kline) {
+      const time = new Date(kline.timestamp).toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = 'kline-item';
+      div.innerHTML = `
+        <strong>${kline.symbol}</strong> [${kline.interval}] ${time}<br>
+        开: ${kline.open} | 高: ${kline.high} | 低: ${kline.low} | 收: ${kline.close} | 量: ${kline.volume}
+      `;
+      $klineData.insertBefore(div, $klineData.firstChild);
+
+      // 限制显示数量
+      while ($klineData.children.length > 20) {
+        $klineData.removeChild($klineData.lastChild);
+      }
+    }
+  </script>
+</body>
+</html>

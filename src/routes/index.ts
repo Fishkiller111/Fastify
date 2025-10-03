@@ -3,6 +3,7 @@ import authRoutes from '../modules/auth/routes.js';
 import userRoutes from '../modules/user/routes.js';
 import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
+import klineRoutes from '../modules/kline/routes.js';
 
 /**
  * 注册所有路由
@@ -20,6 +21,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册验证码路由
   fastify.register(verificationRoutes, { prefix: '/api/verification' });
+
+  // 注册 K线数据路由
+  fastify.register(klineRoutes, { prefix: '/api/kline' });
 }
 
 export default registerRoutes;

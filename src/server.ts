@@ -7,6 +7,9 @@ import registerRoutes from './routes/index.js';
 // 创建Fastify实例
 const app = fastify({ logger: true });
 
+// 注册 WebSocket 插件
+await app.register(import('@fastify/websocket'));
+
 // 允许跨域访问（暂时放开所有域）
 await app.register(import('@fastify/cors'), {
   origin: true,
