@@ -1,112 +1,128 @@
-import { Kline, KlineInterval, KlineQueryParams } from './types.js';
+import pool from '../../config/database.js';
+import { EventOddsKline, OddsSnapshot, KlineInterval, EventKlineQueryParams } from './types.js';
 
-class KlineService {
-  // 模拟数据存储（实际应用中应使用数据库或 Redis）
-  private klineData: Map<string, Kline[]> = new Map();
+class EventKlineService {
+  // 内存存储赔率快照（生产环境应使用Redis或时序数据库）
+  private oddsSnapshots: Map<number, OddsSnapshot[]> = new Map();
 
   /**
-   * 获取历史 K线数据
+   * 记录赔率快照
    */
-  async getHistoricalKlines(params: KlineQueryParams): Promise<Kline[]> {
-    const key = `${params.symbol}_${params.interval}`;
-    let data = this.klineData.get(key) || [];
+  async recordOddsSnapshot(eventId: number): Promise<void> {
+    const result = await pool.query(
+      'SELECT yes_odds, no_odds, yes_pool, no_pool FROM meme_events WHERE id = $1',
+      [eventId]
+    );
+
+    if (result.rows.length > 0) {
+      const event = result.rows[0];
+      const snapshot: OddsSnapshot = {
+        event_id: eventId,
+        yes_odds: parseFloat(event.yes_odds),
+        no_odds: parseFloat(event.no_odds),
+        yes_pool: parseFloat(event.yes_pool),
+        no_pool: parseFloat(event.no_pool),
+        timestamp: Date.now(),
+      };
+
+      const snapshots = this.oddsSnapshots.get(eventId) || [];
+      snapshots.push(snapshot);
+      this.oddsSnapshots.set(eventId, snapshots);
+    }
+  }
+
+  /**
+   * 生成K线数据
+   */
+  async generateKline(eventId: number, interval: KlineInterval): Promise<EventOddsKline[]> {
+    const snapshots = this.oddsSnapshots.get(eventId) || [];
+    if (snapshots.length === 0) {
+      return [];
+    }
+
+    const intervalMs = this.getIntervalMs(interval);
+    const klines: EventOddsKline[] = [];
+
+    // 按时间分组快照
+    const groupedSnapshots = new Map<number, OddsSnapshot[]>();
+    
+    snapshots.forEach(snapshot => {
+      const periodStart = Math.floor(snapshot.timestamp / intervalMs) * intervalMs;
+      const group = groupedSnapshots.get(periodStart) || [];
+      group.push(snapshot);
+      groupedSnapshots.set(periodStart, group);
+    });
+
+    // 生成每个周期的K线
+    groupedSnapshots.forEach((periodSnapshots, timestamp) => {
+      if (periodSnapshots.length === 0) return;
+
+      const yesOdds = periodSnapshots.map(s => s.yes_odds);
+      const noOdds = periodSnapshots.map(s => s.no_odds);
+      const lastSnapshot = periodSnapshots[periodSnapshots.length - 1];
+
+      klines.push({
+        event_id: eventId,
+        interval,
+        timestamp,
+        yes_odds_open: yesOdds[0],
+        yes_odds_high: Math.max(...yesOdds),
+        yes_odds_low: Math.min(...yesOdds),
+        yes_odds_close: yesOdds[yesOdds.length - 1],
+        no_odds_open: noOdds[0],
+        no_odds_high: Math.max(...noOdds),
+        no_odds_low: Math.min(...noOdds),
+        no_odds_close: noOdds[noOdds.length - 1],
+        yes_pool: lastSnapshot.yes_pool,
+        no_pool: lastSnapshot.no_pool,
+        total_bets: periodSnapshots.length,
+      });
+    });
+
+    return klines.sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  /**
+   * 获取历史K线数据
+   */
+  async getHistoricalKlines(params: EventKlineQueryParams): Promise<EventOddsKline[]> {
+    let klines = await this.generateKline(params.event_id, params.interval);
 
     // 时间范围过滤
     if (params.startTime) {
-      data = data.filter(k => k.timestamp >= params.startTime!);
+      klines = klines.filter(k => k.timestamp >= params.startTime!);
     }
     if (params.endTime) {
-      data = data.filter(k => k.timestamp <= params.endTime!);
+      klines = klines.filter(k => k.timestamp <= params.endTime!);
     }
 
     // 限制返回数量
     const limit = params.limit || 500;
-    return data.slice(-limit);
+    return klines.slice(-limit);
   }
 
   /**
-   * 添加新的 K线数据
+   * 获取当前实时赔率
    */
-  async addKline(kline: Kline): Promise<void> {
-    const key = `${kline.symbol}_${kline.interval}`;
-    const data = this.klineData.get(key) || [];
+  async getCurrentOdds(eventId: number): Promise<OddsSnapshot | null> {
+    const result = await pool.query(
+      'SELECT yes_odds, no_odds, yes_pool, no_pool FROM meme_events WHERE id = $1',
+      [eventId]
+    );
 
-    // 检查是否已存在相同时间戳的数据
-    const existingIndex = data.findIndex(k => k.timestamp === kline.timestamp);
-
-    if (existingIndex >= 0) {
-      // 更新现有数据
-      data[existingIndex] = kline;
-    } else {
-      // 添加新数据并保持时间顺序
-      data.push(kline);
-      data.sort((a, b) => a.timestamp - b.timestamp);
+    if (result.rows.length === 0) {
+      return null;
     }
 
-    this.klineData.set(key, data);
-  }
-
-  /**
-   * 生成模拟 K线数据（用于测试）
-   */
-  generateMockKline(symbol: string, interval: KlineInterval): Kline {
-    const now = Date.now();
-    const basePrice = 50000; // 基础价格
-    const volatility = 100; // 波动范围
-
-    const open = basePrice + Math.random() * volatility - volatility / 2;
-    const close = open + Math.random() * volatility - volatility / 2;
-    const high = Math.max(open, close) + Math.random() * volatility / 2;
-    const low = Math.min(open, close) - Math.random() * volatility / 2;
-    const volume = Math.random() * 1000;
-
+    const event = result.rows[0];
     return {
-      symbol,
-      interval,
-      timestamp: now,
-      open: parseFloat(open.toFixed(2)),
-      high: parseFloat(high.toFixed(2)),
-      low: parseFloat(low.toFixed(2)),
-      close: parseFloat(close.toFixed(2)),
-      volume: parseFloat(volume.toFixed(4)),
+      event_id: eventId,
+      yes_odds: parseFloat(event.yes_odds),
+      no_odds: parseFloat(event.no_odds),
+      yes_pool: parseFloat(event.yes_pool),
+      no_pool: parseFloat(event.no_pool),
+      timestamp: Date.now(),
     };
-  }
-
-  /**
-   * 初始化历史数据（用于测试）
-   */
-  async initMockData(symbol: string, interval: KlineInterval, count: number = 100): Promise<void> {
-    const key = `${symbol}_${interval}`;
-    const data: Kline[] = [];
-
-    // 计算间隔时间（毫秒）
-    const intervalMs = this.getIntervalMs(interval);
-    const now = Date.now();
-
-    for (let i = count - 1; i >= 0; i--) {
-      const timestamp = now - i * intervalMs;
-      const basePrice = 50000;
-      const volatility = 100;
-
-      const open = basePrice + Math.random() * volatility - volatility / 2;
-      const close = open + Math.random() * volatility - volatility / 2;
-      const high = Math.max(open, close) + Math.random() * volatility / 2;
-      const low = Math.min(open, close) - Math.random() * volatility / 2;
-      const volume = Math.random() * 1000;
-
-      data.push({
-        symbol,
-        interval,
-        timestamp,
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        volume: parseFloat(volume.toFixed(4)),
-      });
-    }
-
-    this.klineData.set(key, data);
   }
 
   /**
@@ -125,6 +141,45 @@ class KlineService {
     };
     return map[interval] || 60 * 1000;
   }
+
+  /**
+   * 初始化事件的模拟历史数据
+   */
+  async initMockEventData(eventId: number, interval: KlineInterval, count: number = 100): Promise<void> {
+    const intervalMs = this.getIntervalMs(interval);
+    const now = Date.now();
+    const snapshots: OddsSnapshot[] = [];
+
+    // 生成模拟的赔率变化数据
+    let yesOdds = 50;
+    let noOdds = 50;
+    let yesPool = 1000;
+    let noPool = 1000;
+
+    for (let i = count - 1; i >= 0; i--) {
+      const timestamp = now - i * intervalMs;
+      
+      // 模拟赔率波动
+      const change = (Math.random() - 0.5) * 5;
+      yesOdds = Math.max(10, Math.min(90, yesOdds + change));
+      noOdds = 100 - yesOdds;
+      
+      // 模拟池子变化
+      yesPool += Math.random() * 100;
+      noPool += Math.random() * 100;
+
+      snapshots.push({
+        event_id: eventId,
+        yes_odds: parseFloat(yesOdds.toFixed(2)),
+        no_odds: parseFloat(noOdds.toFixed(2)),
+        yes_pool: parseFloat(yesPool.toFixed(2)),
+        no_pool: parseFloat(noPool.toFixed(2)),
+        timestamp,
+      });
+    }
+
+    this.oddsSnapshots.set(eventId, snapshots);
+  }
 }
 
-export default new KlineService();
+export default new EventKlineService();

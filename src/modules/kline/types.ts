@@ -10,31 +10,47 @@ export enum KlineInterval {
   ONE_WEEK = '1w',
 }
 
-// K线数据结构
-export interface Kline {
-  symbol: string;        // 交易对，如 'BTC/USDT'
-  interval: KlineInterval; // 时间周期
-  timestamp: number;     // 时间戳（毫秒）
-  open: number;          // 开盘价
-  high: number;          // 最高价
-  low: number;           // 最低价
-  close: number;         // 收盘价
-  volume: number;        // 成交量
+// 基于事件赔率的K线数据结构
+export interface EventOddsKline {
+  event_id: number;           // 事件ID
+  interval: KlineInterval;    // 时间周期
+  timestamp: number;          // 时间戳（毫秒）
+  yes_odds_open: number;      // Yes开盘赔率
+  yes_odds_high: number;      // Yes最高赔率
+  yes_odds_low: number;       // Yes最低赔率
+  yes_odds_close: number;     // Yes收盘赔率
+  no_odds_open: number;       // No开盘赔率
+  no_odds_high: number;       // No最高赔率
+  no_odds_low: number;        // No最低赔率
+  no_odds_close: number;      // No收盘赔率
+  yes_pool: number;           // Yes池子金额
+  no_pool: number;            // No池子金额
+  total_bets: number;         // 总投注次数
 }
 
-// WebSocket 消息类型
-export interface KlineWSMessage {
-  type: 'subscribe' | 'unsubscribe' | 'kline';
-  symbol?: string;
-  interval?: KlineInterval;
-  data?: Kline;
+// 赔率快照（用于生成K线）
+export interface OddsSnapshot {
+  event_id: number;
+  yes_odds: number;
+  no_odds: number;
+  yes_pool: number;
+  no_pool: number;
+  timestamp: number;
 }
 
-// 历史数据查询参数
-export interface KlineQueryParams {
-  symbol: string;
+// K线查询参数
+export interface EventKlineQueryParams {
+  event_id: number;
   interval: KlineInterval;
   startTime?: number;
   endTime?: number;
   limit?: number;
+}
+
+// WebSocket 消息类型
+export interface EventKlineWSMessage {
+  type: 'subscribe' | 'unsubscribe' | 'kline' | 'odds_update';
+  event_id?: number;
+  interval?: KlineInterval;
+  data?: EventOddsKline | OddsSnapshot;
 }
