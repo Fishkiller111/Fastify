@@ -8,6 +8,7 @@ import type {
   GetEventsQuery,
   GetUserBetsQuery,
 } from './types.js';
+import EventKlineService from '../kline/service.js';
 
 /**
  * 创建Meme事件合约
@@ -42,24 +43,37 @@ export async function createMemeEvent(
       [data.initial_pool_amount, creatorId]
     );
 
-    // 创建事件
+    // 根据创建者选择的方向分配初始资金池
+    const yesPool = data.creator_side === 'yes' ? data.initial_pool_amount : 0;
+    const noPool = data.creator_side === 'no' ? data.initial_pool_amount : 0;
+
+    // 创建事件(待匹配状态)
     const result = await client.query(
-      `INSERT INTO meme_events 
-       (creator_id, type, contract_address, initial_pool_amount, yes_pool, no_pool)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO meme_events
+       (creator_id, type, contract_address, creator_side, initial_pool_amount,
+        yes_pool, no_pool, status, deadline)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending_match', $8)
        RETURNING *`,
       [
         creatorId,
         data.type,
-        data.contract_address || null,
+        data.contract_address,
+        data.creator_side,
         data.initial_pool_amount,
-        data.initial_pool_amount / 2,
-        data.initial_pool_amount / 2,
+        yesPool,
+        noPool,
+        data.deadline,
       ]
     );
 
     await client.query('COMMIT');
-    return result.rows[0];
+
+    const event = result.rows[0];
+
+    // 记录初始赔率快照
+    await EventKlineService.recordOddsSnapshot(event.id);
+
+    return event;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -99,9 +113,10 @@ export async function placeBet(
   try {
     await client.query('BEGIN');
 
-    // 检查事件状态
+    // 检查事件是否存在且可下注
     const eventResult = await client.query(
-      `SELECT * FROM meme_events WHERE id = $1 AND status = 'active'`,
+      `SELECT * FROM meme_events
+       WHERE id = $1 AND status IN ('pending_match', 'active')`,
       [data.event_id]
     );
 
@@ -110,6 +125,11 @@ export async function placeBet(
     }
 
     const event = eventResult.rows[0];
+
+    // 待匹配状态时,只能下注与创建者相反的方向
+    if (event.status === 'pending_match' && data.bet_type === event.creator_side) {
+      throw new Error('待匹配状态下只能下注相反方向');
+    }
 
     // 检查用户余额
     const userResult = await client.query(
@@ -132,49 +152,65 @@ export async function placeBet(
       [data.bet_amount, userId]
     );
 
-    // 更新池子和计算新赔率
-    let newYesPool = parseFloat(event.yes_pool);
-    let newNoPool = parseFloat(event.no_pool);
-    let totalYesBets = event.total_yes_bets;
-    let totalNoBets = event.total_no_bets;
+    // 更新事件池子
+    const poolField = data.bet_type === 'yes' ? 'yes_pool' : 'no_pool';
+    const counterField = data.bet_type === 'yes' ? 'total_yes_bets' : 'total_no_bets';
 
-    if (data.bet_type === 'yes') {
-      newYesPool += data.bet_amount;
-      totalYesBets += 1;
-    } else {
-      newNoPool += data.bet_amount;
-      totalNoBets += 1;
+    await client.query(
+      `UPDATE meme_events
+       SET ${poolField} = ${poolField} + $1,
+           ${counterField} = ${counterField} + 1
+       WHERE id = $2`,
+      [data.bet_amount, data.event_id]
+    );
+
+    // 获取更新后的事件信息
+    const updatedEvent = await client.query(
+      'SELECT yes_pool, no_pool, status, creator_side FROM meme_events WHERE id = $1',
+      [data.event_id]
+    );
+
+    const { yes_pool, no_pool, status, creator_side } = updatedEvent.rows[0];
+    const odds = calculateOdds(parseFloat(yes_pool), parseFloat(no_pool));
+
+    // 如果是待匹配状态且对方池子已有资金,则激活事件
+    if (status === 'pending_match') {
+      const oppositePool = creator_side === 'yes' ? parseFloat(no_pool) : parseFloat(yes_pool);
+      if (oppositePool > 0) {
+        await client.query(
+          `UPDATE meme_events
+           SET status = 'active', launch_time = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [data.event_id]
+        );
+      }
     }
 
-    const { yesOdds, noOdds } = calculateOdds(newYesPool, newNoPool);
-
-    // 当前赔率
-    const currentOdds =
-      data.bet_type === 'yes' ? parseFloat(event.yes_odds) : parseFloat(event.no_odds);
-
-    // 计算潜在收益
-    const potentialPayout = (data.bet_amount * currentOdds) / 100;
-
-    // 更新事件
+    // 更新赔率
     await client.query(
-      `UPDATE meme_events 
-       SET yes_pool = $1, no_pool = $2, 
-           yes_odds = $3, no_odds = $4,
-           total_yes_bets = $5, total_no_bets = $6
-       WHERE id = $7`,
-      [newYesPool, newNoPool, yesOdds, noOdds, totalYesBets, totalNoBets, data.event_id]
+      `UPDATE meme_events
+       SET yes_odds = $1, no_odds = $2
+       WHERE id = $3`,
+      [odds.yesOdds, odds.noOdds, data.event_id]
     );
 
     // 创建投注记录
+    const currentOdds = data.bet_type === 'yes' ? odds.yesOdds : odds.noOdds;
+    const potentialPayout = (data.bet_amount * (currentOdds / 100)).toFixed(2);
+
     const betResult = await client.query(
-      `INSERT INTO meme_bets 
-       (event_id, user_id, bet_type, bet_amount, odds_at_bet, potential_payout)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO meme_bets
+       (event_id, user_id, bet_type, bet_amount, odds_at_bet, potential_payout, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
        RETURNING *`,
       [data.event_id, userId, data.bet_type, data.bet_amount, currentOdds, potentialPayout]
     );
 
     await client.query('COMMIT');
+
+    // 记录赔率快照
+    await EventKlineService.recordOddsSnapshot(data.event_id);
+
     return betResult.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
@@ -187,7 +223,7 @@ export async function placeBet(
 /**
  * 结算事件
  */
-export async function settleEvent(data: SettleEventRequest): Promise<MemeEvent> {
+export async function settleEvent(data: SettleEventRequest): Promise<void> {
   const client = await pool.connect();
 
   try {
@@ -195,82 +231,67 @@ export async function settleEvent(data: SettleEventRequest): Promise<MemeEvent> 
 
     // 获取事件信息
     const eventResult = await client.query(
-      `SELECT * FROM meme_events WHERE id = $1 AND status = 'active'`,
-      [data.event_id]
+      'SELECT * FROM meme_events WHERE id = $1 AND status = $2',
+      [data.event_id, 'active']
     );
 
     if (eventResult.rows.length === 0) {
-      throw new Error('事件不存在或已结束');
+      throw new Error('事件不存在或状态不正确');
     }
 
     const event = eventResult.rows[0];
 
+    // 检查是否到达deadline
+    if (new Date() < new Date(event.deadline)) {
+      throw new Error('未到结算时间');
+    }
+
+    // 确定获胜方
+    const winnerSide = data.is_launched ? 'yes' : 'no';
+    const totalPool = parseFloat(event.yes_pool) + parseFloat(event.no_pool);
+    const winnerPool = parseFloat(winnerSide === 'yes' ? event.yes_pool : event.no_pool);
+
     // 更新事件状态
     await client.query(
-      `UPDATE meme_events 
-       SET is_launched = $1, status = 'settled', settled_at = CURRENT_TIMESTAMP
+      `UPDATE meme_events
+       SET status = 'settled', is_launched = $1, settled_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
       [data.is_launched, data.event_id]
     );
 
-    // 获取所有投注记录
-    const betsResult = await client.query(
-      `SELECT * FROM meme_bets WHERE event_id = $1 AND status = 'pending'`,
-      [data.event_id]
+    // 获取所有获胜的投注
+    const winningBets = await client.query(
+      'SELECT * FROM meme_bets WHERE event_id = $1 AND bet_type = $2 AND status = $3',
+      [data.event_id, winnerSide, 'pending']
     );
 
-    // 结算投注
-    const winningBetType = data.is_launched ? 'yes' : 'no';
+    // 分配奖金给获胜者
+    for (const bet of winningBets.rows) {
+      const betAmount = parseFloat(bet.bet_amount);
+      const userShare = betAmount / winnerPool;
+      const payout = (userShare * totalPool).toFixed(2);
 
-    for (const bet of betsResult.rows) {
-      if (bet.bet_type === winningBetType) {
-        // 赢家 - 计算收益并返还本金
-        const payout = parseFloat(bet.potential_payout) + parseFloat(bet.bet_amount);
+      // 更新投注状态和实际奖金
+      await client.query(
+        'UPDATE meme_bets SET status = $1, actual_payout = $2 WHERE id = $3',
+        ['won', payout, bet.id]
+      );
 
-        await client.query(
-          `UPDATE meme_bets 
-           SET status = 'won', actual_payout = $1
-           WHERE id = $2`,
-          [payout, bet.id]
-        );
-
-        // 增加用户余额
-        await client.query(
-          'UPDATE users SET balance = balance + $1 WHERE id = $2',
-          [payout, bet.user_id]
-        );
-      } else {
-        // 输家
-        await client.query(
-          `UPDATE meme_bets SET status = 'lost' WHERE id = $1`,
-          [bet.id]
-        );
-      }
-    }
-
-    // 返还创建者的初始资金（如果有余额）
-    const totalPayout = betsResult.rows
-      .filter((bet) => bet.bet_type === winningBetType)
-      .reduce((sum, bet) => sum + parseFloat(bet.potential_payout) + parseFloat(bet.bet_amount), 0);
-
-    const totalPool = parseFloat(event.yes_pool) + parseFloat(event.no_pool);
-    const remainingPool = totalPool - totalPayout;
-
-    if (remainingPool > 0) {
+      // 发放奖金给用户
       await client.query(
         'UPDATE users SET balance = balance + $1 WHERE id = $2',
-        [remainingPool, event.creator_id]
+        [payout, bet.user_id]
       );
     }
 
-    await client.query('COMMIT');
-
-    const updatedEvent = await client.query(
-      'SELECT * FROM meme_events WHERE id = $1',
-      [data.event_id]
+    // 更新失败的投注
+    const loserSide = winnerSide === 'yes' ? 'no' : 'yes';
+    await client.query(
+      'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4',
+      ['lost', data.event_id, loserSide, 'pending']
     );
 
-    return updatedEvent.rows[0];
+    await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -285,32 +306,42 @@ export async function settleEvent(data: SettleEventRequest): Promise<MemeEvent> 
 export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
   const { status, type, limit = 20, offset = 0 } = query;
 
-  let sql = 'SELECT * FROM meme_events WHERE 1=1';
+  const conditions = [];
   const params: any[] = [];
-  let paramCount = 0;
+  let paramCount = 1;
 
   if (status) {
+    conditions.push(`status = $${paramCount++}`);
     params.push(status);
-    sql += ` AND status = $${++paramCount}`;
   }
 
   if (type) {
+    conditions.push(`type = $${paramCount++}`);
     params.push(type);
-    sql += ` AND type = $${++paramCount}`;
   }
 
-  params.push(limit, offset);
-  sql += ` ORDER BY created_at DESC LIMIT $${++paramCount} OFFSET $${++paramCount}`;
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const result = await pool.query(sql, params);
+  const result = await pool.query(
+    `SELECT * FROM meme_events
+     ${whereClause}
+     ORDER BY created_at DESC
+     LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
+    [...params, limit, offset]
+  );
+
   return result.rows;
 }
 
 /**
- * 获取单个事件详情
+ * 根据ID获取事件
  */
 export async function getEventById(eventId: number): Promise<MemeEvent | null> {
-  const result = await pool.query('SELECT * FROM meme_events WHERE id = $1', [eventId]);
+  const result = await pool.query(
+    'SELECT * FROM meme_events WHERE id = $1',
+    [eventId]
+  );
+
   return result.rows[0] || null;
 }
 
@@ -320,28 +351,43 @@ export async function getEventById(eventId: number): Promise<MemeEvent | null> {
 export async function getUserBets(query: GetUserBetsQuery): Promise<MemeBet[]> {
   const { user_id, event_id, status, limit = 20, offset = 0 } = query;
 
-  let sql = 'SELECT * FROM meme_bets WHERE 1=1';
+  const conditions = [];
   const params: any[] = [];
-  let paramCount = 0;
+  let paramCount = 1;
 
   if (user_id) {
+    conditions.push(`user_id = $${paramCount++}`);
     params.push(user_id);
-    sql += ` AND user_id = $${++paramCount}`;
   }
 
   if (event_id) {
+    conditions.push(`event_id = $${paramCount++}`);
     params.push(event_id);
-    sql += ` AND event_id = $${++paramCount}`;
   }
 
   if (status) {
+    conditions.push(`status = $${paramCount++}`);
     params.push(status);
-    sql += ` AND status = $${++paramCount}`;
   }
 
-  params.push(limit, offset);
-  sql += ` ORDER BY created_at DESC LIMIT $${++paramCount} OFFSET $${++paramCount}`;
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const result = await pool.query(sql, params);
+  const result = await pool.query(
+    `SELECT * FROM meme_bets
+     ${whereClause}
+     ORDER BY created_at DESC
+     LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
+    [...params, limit, offset]
+  );
+
   return result.rows;
 }
+
+export default {
+  createMemeEvent,
+  placeBet,
+  settleEvent,
+  getEvents,
+  getEventById,
+  getUserBets,
+};

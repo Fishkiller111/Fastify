@@ -129,6 +129,7 @@ async function up() {
         creator_id INTEGER NOT NULL REFERENCES users(id),
         type VARCHAR(20) NOT NULL CHECK (type IN ('pumpfun', 'bonk')),
         contract_address VARCHAR(100),
+        creator_side VARCHAR(3) NOT NULL CHECK (creator_side IN ('yes', 'no')),
         initial_pool_amount NUMERIC(36, 18) NOT NULL,
         yes_pool NUMERIC(36, 18) DEFAULT 0,
         no_pool NUMERIC(36, 18) DEFAULT 0,
@@ -137,7 +138,9 @@ async function up() {
         total_yes_bets INTEGER DEFAULT 0,
         total_no_bets INTEGER DEFAULT 0,
         is_launched BOOLEAN DEFAULT NULL,
-        status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'settled', 'cancelled')),
+        status VARCHAR(20) DEFAULT 'pending_match' CHECK (status IN ('pending_match', 'active', 'settled', 'cancelled')),
+        deadline TIMESTAMP NOT NULL,
+        launch_time TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         settled_at TIMESTAMP
       )

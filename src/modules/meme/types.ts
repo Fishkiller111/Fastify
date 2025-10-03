@@ -2,7 +2,7 @@
 export type MemeEventType = 'pumpfun' | 'bonk';
 
 // Meme事件状态
-export type MemeEventStatus = 'active' | 'settled' | 'cancelled';
+export type MemeEventStatus = 'pending_match' | 'active' | 'settled' | 'cancelled';
 
 // 投注类型
 export type BetType = 'yes' | 'no';
@@ -16,6 +16,7 @@ export interface MemeEvent {
   creator_id: number;
   type: MemeEventType;
   contract_address?: string;
+  creator_side: BetType;
   initial_pool_amount: string;
   yes_pool: string;
   no_pool: string;
@@ -25,6 +26,8 @@ export interface MemeEvent {
   total_no_bets: number;
   is_launched: boolean | null;
   status: MemeEventStatus;
+  deadline: Date;
+  launch_time?: Date;
   created_at: Date;
   settled_at?: Date;
 }
@@ -46,8 +49,10 @@ export interface MemeBet {
 // 创建事件请求接口
 export interface CreateMemeEventRequest {
   type: MemeEventType;
+  contract_address: string;
+  creator_side: BetType;
   initial_pool_amount: number;
-  contract_address?: string;
+  deadline: string; // ISO 8601格式时间字符串
 }
 
 // 投注请求接口
