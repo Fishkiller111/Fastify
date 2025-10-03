@@ -1,279 +1,233 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>K线图实时数据测试</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-    .container {
-      background: white;
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    h1 { color: #333; }
-    .controls {
-      margin-bottom: 20px;
-      padding: 15px;
-      background: #f8f9fa;
-      border-radius: 5px;
-    }
-    button {
-      padding: 10px 20px;
-      margin-right: 10px;
-      margin-bottom: 10px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover { background: #0056b3; }
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-    .status {
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 4px;
-      font-weight: bold;
-    }
-    .status.connected {
-      background: #d4edda;
-      color: #155724;
-    }
-    .status.disconnected {
-      background: #f8d7da;
-      color: #721c24;
-    }
-    #klineData {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #ddd;
-      padding: 10px;
-      background: #fafafa;
-      font-family: monospace;
-      font-size: 12px;
-    }
-    .kline-item {
-      padding: 5px;
-      margin: 2px 0;
-      background: white;
-      border-left: 3px solid #007bff;
-    }
-    .info {
-      background: #e7f3ff;
-      padding: 10px;
-      border-radius: 4px;
-      margin-bottom: 15px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K线WebSocket测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .odds-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .odds-box {
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .yes-odds {
+            background: #d1ecf1;
+            border: 2px solid #0c5460;
+        }
+        .no-odds {
+            background: #f8d7da;
+            border: 2px solid #721c24;
+        }
+        .odds-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .pool-info {
+            font-size: 14px;
+            color: #666;
+        }
+        #messages {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .message {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background: white;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-connect { background: #28a745; color: white; }
+        .btn-disconnect { background: #dc3545; color: white; }
+        .timestamp {
+            color: #888;
+            font-size: 11px;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>📊 K线图实时数据测试</h1>
-
-    <div class="info">
-      <strong>使用说明：</strong>
-      <ol>
-        <li>先点击"初始化测试数据"加载历史数据</li>
-        <li>点击"连接 WebSocket"建立实时连接</li>
-        <li>点击"订阅 K线数据"开始接收实时推送</li>
-        <li>点击"获取历史数据"查看 HTTP API 返回的数据</li>
-      </ol>
+    <h1>K线WebSocket实时测试</h1>
+    
+    <div class="container">
+        <h3>连接控制</h3>
+        <div class="controls">
+            <input type="number" id="eventId" placeholder="Event ID" value="1">
+            <button class="btn-connect" onclick="connect()">连接WebSocket</button>
+            <button class="btn-disconnect" onclick="disconnect()">断开连接</button>
+        </div>
+        <div id="status" class="status disconnected">状态: 未连接</div>
     </div>
 
-    <div class="controls">
-      <button id="initData">初始化测试数据</button>
-      <button id="connectWS">连接 WebSocket</button>
-      <button id="disconnectWS" disabled>断开 WebSocket</button>
-      <button id="subscribe" disabled>订阅 K线数据</button>
-      <button id="unsubscribe" disabled>取消订阅</button>
-      <button id="getHistory">获取历史数据</button>
+    <div class="container">
+        <h3>实时赔率显示</h3>
+        <div class="odds-display">
+            <div class="odds-box yes-odds">
+                <div>YES赔率</div>
+                <div class="odds-value" id="yesOdds">--</div>
+                <div class="pool-info">
+                    资金池: <span id="yesPool">--</span>
+                </div>
+            </div>
+            <div class="odds-box no-odds">
+                <div>NO赔率</div>
+                <div class="odds-value" id="noOdds">--</div>
+                <div class="pool-info">
+                    资金池: <span id="noPool">--</span>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="status" class="status disconnected">
-      状态：未连接
+    <div class="container">
+        <h3>消息日志</h3>
+        <div id="messages"></div>
     </div>
 
-    <h3>实时数据流：</h3>
-    <div id="klineData"></div>
-  </div>
+    <script>
+        let ws = null;
 
-  <script>
-    const API_BASE = 'http://localhost:3000';
-    const WS_URL = 'ws://localhost:3000/api/kline/stream';
-
-    let ws = null;
-    let isSubscribed = false;
-
-    const $initData = document.getElementById('initData');
-    const $connectWS = document.getElementById('connectWS');
-    const $disconnectWS = document.getElementById('disconnectWS');
-    const $subscribe = document.getElementById('subscribe');
-    const $unsubscribe = document.getElementById('unsubscribe');
-    const $getHistory = document.getElementById('getHistory');
-    const $status = document.getElementById('status');
-    const $klineData = document.getElementById('klineData');
-
-    // 初始化测试数据
-    $initData.addEventListener('click', async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/kline/init-mock`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            symbol: 'BTC/USDT',
-            interval: '1m',
-            count: 100
-          })
-        });
-        const data = await response.json();
-        addLog('✅ ' + data.message, 'success');
-      } catch (err) {
-        addLog('❌ 初始化失败: ' + err.message, 'error');
-      }
-    });
-
-    // 连接 WebSocket
-    $connectWS.addEventListener('click', () => {
-      if (ws) return;
-
-      ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        updateStatus('connected');
-        addLog('✅ WebSocket 已连接');
-        $connectWS.disabled = true;
-        $disconnectWS.disabled = false;
-        $subscribe.disabled = false;
-      };
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === 'subscribed') {
-          addLog(`✅ 已订阅: ${msg.symbol} ${msg.interval}`);
-          isSubscribed = true;
-          $subscribe.disabled = true;
-          $unsubscribe.disabled = false;
-        } else if (msg.type === 'unsubscribed') {
-          addLog(`⚠️ 已取消订阅: ${msg.symbol} ${msg.interval}`);
-          isSubscribed = false;
-          $subscribe.disabled = false;
-          $unsubscribe.disabled = true;
-        } else if (msg.type === 'kline') {
-          displayKline(msg.data);
+        function addMessage(text, isError = false) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            if (isError) messageDiv.style.borderLeftColor = '#dc3545';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            messageDiv.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span> ${text}
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-      };
 
-      ws.onclose = () => {
-        updateStatus('disconnected');
-        addLog('⚠️ WebSocket 已断开');
-        ws = null;
-        isSubscribed = false;
-        $connectWS.disabled = false;
-        $disconnectWS.disabled = true;
-        $subscribe.disabled = true;
-        $unsubscribe.disabled = true;
-      };
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = '状态: 已连接';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = '状态: 未连接';
+            }
+        }
 
-      ws.onerror = (err) => {
-        addLog('❌ WebSocket 错误: ' + err);
-      };
-    });
+        function updateOddsDisplay(data) {
+            document.getElementById('yesOdds').textContent = data.yes_odds?.toFixed(2) || '--';
+            document.getElementById('noOdds').textContent = data.no_odds?.toFixed(2) || '--';
+            document.getElementById('yesPool').textContent = data.yes_pool?.toFixed(2) || '--';
+            document.getElementById('noPool').textContent = data.no_pool?.toFixed(2) || '--';
+        }
 
-    // 断开 WebSocket
-    $disconnectWS.addEventListener('click', () => {
-      if (ws) {
-        ws.close();
-      }
-    });
+        function connect() {
+            const eventId = document.getElementById('eventId').value;
+            if (!eventId) {
+                alert('请输入Event ID');
+                return;
+            }
 
-    // 订阅 K线数据
-    $subscribe.addEventListener('click', () => {
-      if (!ws) return;
+            if (ws) {
+                ws.close();
+            }
 
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        symbol: 'BTC/USDT',
-        interval: '1m'
-      }));
-    });
+            const wsUrl = `ws://localhost:3000/ws/kline/events/${eventId}`;
+            addMessage(`正在连接到: ${wsUrl}`);
 
-    // 取消订阅
-    $unsubscribe.addEventListener('click', () => {
-      if (!ws) return;
+            ws = new WebSocket(wsUrl);
 
-      ws.send(JSON.stringify({
-        type: 'unsubscribe',
-        symbol: 'BTC/USDT',
-        interval: '1m'
-      }));
-    });
+            ws.onopen = () => {
+                updateStatus(true);
+                addMessage('✅ WebSocket连接成功!');
+            };
 
-    // 获取历史数据
-    $getHistory.addEventListener('click', async () => {
-      try {
-        const response = await fetch(
-          `${API_BASE}/api/kline/history?symbol=BTC/USDT&interval=1m&limit=10`
-        );
-        const data = await response.json();
-        addLog(`📊 获取到 ${data.length} 条历史数据`);
-        data.forEach(kline => displayKline(kline));
-      } catch (err) {
-        addLog('❌ 获取历史数据失败: ' + err.message);
-      }
-    });
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    addMessage(`📊 收到消息: ${JSON.stringify(message, null, 2)}`);
 
-    // 更新状态
-    function updateStatus(status) {
-      if (status === 'connected') {
-        $status.className = 'status connected';
-        $status.textContent = '状态：已连接';
-      } else {
-        $status.className = 'status disconnected';
-        $status.textContent = '状态：未连接';
-      }
-    }
+                    if (message.type === 'odds_update' && message.data) {
+                        updateOddsDisplay(message.data);
+                        addMessage(`🔄 赔率已更新 - YES: ${message.data.yes_odds}, NO: ${message.data.no_odds}`);
+                    }
+                } catch (e) {
+                    addMessage(`⚠️ 解析消息失败: ${event.data}`, true);
+                }
+            };
 
-    // 添加日志
-    function addLog(message, type = 'info') {
-      const div = document.createElement('div');
-      div.className = 'kline-item';
-      div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-      $klineData.insertBefore(div, $klineData.firstChild);
+            ws.onerror = (error) => {
+                addMessage(`❌ WebSocket错误: ${error}`, true);
+            };
 
-      // 限制显示数量
-      while ($klineData.children.length > 50) {
-        $klineData.removeChild($klineData.lastChild);
-      }
-    }
+            ws.onclose = () => {
+                updateStatus(false);
+                addMessage('🔌 WebSocket连接已关闭');
+                ws = null;
+            };
+        }
 
-    // 显示 K线数据
-    function displayKline(kline) {
-      const time = new Date(kline.timestamp).toLocaleTimeString();
-      const div = document.createElement('div');
-      div.className = 'kline-item';
-      div.innerHTML = `
-        <strong>${kline.symbol}</strong> [${kline.interval}] ${time}<br>
-        开: ${kline.open} | 高: ${kline.high} | 低: ${kline.low} | 收: ${kline.close} | 量: ${kline.volume}
-      `;
-      $klineData.insertBefore(div, $klineData.firstChild);
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                addMessage('断开连接');
+            } else {
+                addMessage('当前没有活动连接', true);
+            }
+        }
 
-      // 限制显示数量
-      while ($klineData.children.length > 20) {
-        $klineData.removeChild($klineData.lastChild);
-      }
-    }
-  </script>
+        // 页面关闭时自动断开
+        window.addEventListener('beforeunload', () => {
+            if (ws) ws.close();
+        });
+    </script>
 </body>
 </html>
