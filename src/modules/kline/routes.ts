@@ -112,6 +112,93 @@ async function klineRoutes(fastify: FastifyInstance) {
       reply.code(400).send({ error: error.message });
     }
   });
+
+  // WebSocket使用文档
+  fastify.get('/websocket-docs', {
+    schema: {
+      description: 'WebSocket实时K线使用文档',
+      tags: ['K线'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            endpoint: { type: 'string' },
+            description: { type: 'string' },
+            protocol: { type: 'string' },
+            connection_example: { type: 'string' },
+            message_format: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                data: {
+                  type: 'object',
+                  properties: {
+                    event_id: { type: 'number' },
+                    yes_odds: { type: 'number' },
+                    no_odds: { type: 'number' },
+                    yes_pool: { type: 'number' },
+                    no_pool: { type: 'number' },
+                    timestamp: { type: 'number' },
+                  },
+                },
+              },
+            },
+            features: { type: 'array', items: { type: 'string' } },
+            javascript_example: { type: 'string' },
+            test_page: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    reply.send({
+      endpoint: 'ws://localhost:3000/ws/kline/events/:eventId',
+      description: 'WebSocket实时K线数据推送接口',
+      protocol: 'WebSocket',
+      connection_example: 'ws://localhost:3000/ws/kline/events/1',
+      message_format: {
+        type: 'odds_update',
+        data: {
+          event_id: 1,
+          yes_odds: 55.50,
+          no_odds: 44.50,
+          yes_pool: 1000.00,
+          no_pool: 800.00,
+          timestamp: Date.now(),
+        },
+      },
+      features: [
+        '连接建立时自动推送当前赔率',
+        '下注发生时自动广播赔率更新',
+        '支持多客户端同时订阅',
+        '断线自动清理资源',
+      ],
+      javascript_example: `
+const ws = new WebSocket('ws://localhost:3000/ws/kline/events/1');
+
+ws.onopen = () => {
+  console.log('WebSocket已连接');
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  if (message.type === 'odds_update') {
+    console.log('赔率更新:', message.data);
+    // 更新UI显示
+  }
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket错误:', error);
+};
+
+ws.onclose = () => {
+  console.log('WebSocket已断开');
+};
+      `.trim(),
+      test_page: 'test-kline.html',
+    });
+  });
 }
 
 export default klineRoutes;
