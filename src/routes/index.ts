@@ -4,6 +4,7 @@ import userRoutes from '../modules/user/routes.js';
 import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
 import klineRoutes from '../modules/kline/routes.js';
+import memeRoutes from '../modules/meme/routes.js';
 
 /**
  * 注册所有路由
@@ -24,6 +25,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册 K线数据路由
   fastify.register(klineRoutes, { prefix: '/api/kline' });
+
+  // 注册 Meme事件合约路由
+  fastify.register(memeRoutes, { prefix: '/api/meme' });
 }
 
 export default registerRoutes;
