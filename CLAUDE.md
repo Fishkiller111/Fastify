@@ -32,7 +32,7 @@ This is a **Fastify-based REST API** with TypeScript, JWT authentication, and Po
 src/
 ├── config/           # Environment and database configuration
 ├── migrations/       # Database schema migrations
-├── modules/          # Feature modules (auth, user, verification, sms, config)
+├── modules/          # Feature modules (auth, user, meme, kline, verification, sms, config)
 ├── plugins/          # Fastify plugins (JWT authentication)
 ├── routes/           # Route registration and organization
 ├── scripts/          # Utility scripts
@@ -44,6 +44,7 @@ Each module follows this structure:
 - `routes.ts` - HTTP endpoints and request/response handling
 - `service.ts` - Business logic and database operations
 - `types.ts` - TypeScript interfaces and type definitions
+- `websocket.ts` (optional) - WebSocket handlers for real-time features
 
 ### Key Architectural Components
 
@@ -86,10 +87,16 @@ Each module follows this structure:
 ### Database Schema
 - **Users**: Authentication, profile data, role-based access control (RBAC)
   - Supports email, SMS, and wallet-based login
-  - Fields: email, phone, wallet_address, password, role, permissions, status
+  - Fields: email, phone, wallet_address, password, role, permissions, status, balance
 - **Config**: Key-value storage for application configuration
   - Used for login method configuration and third-party service credentials
   - Examples: login_method, aliyun_sms_* settings
+- **Meme Events**: Prediction market for meme token launches
+  - Tracks betting pools (yes_pool, no_pool), odds, and settlement results
+  - States: pending_match → active → settled
+  - See MEME_FLOW.md for detailed business logic
+- **Meme Bets**: User betting records with potential and actual payouts
+- **Event Klines**: Historical odds snapshots for K-line chart visualization
 - **Migrations**: Version-controlled schema changes with sequential numbering
 
 ## Important Implementation Notes
@@ -142,6 +149,54 @@ node dist/scripts/init-sms-config.js
 - Permission errors: `403 Forbidden`
 - Validation errors: `400 Bad Request`
 - Database errors: Caught in services, translated to user-friendly messages
+
+## Meme Event Prediction Market
+
+This API includes a prediction market system for meme token launches. See **MEME_FLOW.md** for complete business logic.
+
+### Key Architecture Patterns
+
+#### State Machine
+Events transition through states: `pending_match` → `active` → `settled`
+- **pending_match**: Creator's side funded, waiting for counter-bets
+- **active**: Both sides have bets, countdown to deadline begins
+- **settled**: Result determined, payouts distributed
+
+#### Dynamic Odds Calculation
+Odds recalculate after each bet based on pool ratios:
+```typescript
+YES_odds = (NO_pool / total_pool) × 100
+NO_odds = (YES_pool / total_pool) × 100
+```
+
+#### Real-time Updates via WebSocket
+- **Connection**: `ws://host/ws/kline/events/{eventId}`
+- **Manager**: `src/modules/kline/websocket.ts` - WebSocketManager class
+- **Broadcasting**: Automatic odds updates after each bet
+- **Message Format**: `{ type: 'odds_update', data: { yes_odds, no_odds, timestamp } }`
+
+#### Settlement & Payout
+- **Trigger**: Admin settlement after deadline
+- **Payout Formula**: `user_payout = (user_bet / winning_pool) × total_pool`
+- **Transaction Safety**: All operations wrapped in database transactions
+
+### Critical Implementation Details
+
+#### Duration Parsing
+Supports flexible time formats in event creation:
+- Minutes: "10minutes", "30minutes"
+- Hours: "5hours", "24hours"
+- Days: "1days", "7days"
+
+#### Deadline After Settlement
+API responses include `deadline_after_settlement` field:
+- For active events: returns `deadline`
+- For settled events: returns actual `settled_at` timestamp
+
+#### Matching Mechanism
+In `pending_match` state, only counter-side bets allowed:
+- Creator bets YES → only NO bets accepted
+- First counter-bet triggers state change to `active`
 
 ## Template Package Architecture
 

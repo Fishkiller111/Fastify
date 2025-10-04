@@ -31,6 +31,7 @@ export interface MemeEvent {
   launch_time?: Date;
   created_at: Date;
   settled_at?: Date;
+  token_name?: string | null;
 }
 
 // 投注记录接口

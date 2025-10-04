@@ -9,6 +9,7 @@ import type {
   GetUserBetsQuery,
 } from './types.js';
 import EventKlineService from '../kline/service.js';
+import { getTokenName, getTokenNames } from './token-service.js';
 
 /**
  * 解析duration字符串并返回毫秒数
@@ -373,7 +374,16 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
     [...params, limit, offset]
   );
 
-  return result.rows;
+  const events = result.rows;
+
+  // 批量查询代币名称
+  const tokenNameMap = await getTokenNames(events);
+
+  // 为每个事件添加 token_name
+  return events.map((event) => ({
+    ...event,
+    token_name: event.contract_address ? tokenNameMap.get(event.contract_address) || null : null,
+  }));
 }
 
 /**
@@ -391,7 +401,18 @@ export async function getEventById(eventId: number): Promise<MemeEvent | null> {
     [eventId]
   );
 
-  return result.rows[0] || null;
+  const event = result.rows[0];
+  if (!event) {
+    return null;
+  }
+
+  // 查询代币名称
+  const tokenName = await getTokenName(event.type, event.contract_address);
+
+  return {
+    ...event,
+    token_name: tokenName,
+  };
 }
 
 /**
