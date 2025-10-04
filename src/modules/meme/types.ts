@@ -27,6 +27,7 @@ export interface MemeEvent {
   is_launched: boolean | null;
   status: MemeEventStatus;
   deadline: Date;
+  deadline_after_settlement?: Date;
   launch_time?: Date;
   created_at: Date;
   settled_at?: Date;
@@ -52,7 +53,7 @@ export interface CreateMemeEventRequest {
   contract_address: string;
   creator_side: BetType;
   initial_pool_amount: number;
-  deadline: string; // ISO 8601格式时间字符串
+  duration: string; // 例如: "10minutes", "30minutes", "1days", 或自定义小时数 "5hours"
 }
 
 // 投注请求接口

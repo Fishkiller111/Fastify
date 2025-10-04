@@ -11,6 +11,41 @@ import type {
 import EventKlineService from '../kline/service.js';
 
 /**
+ * 解析duration字符串并返回毫秒数
+ * 支持格式: "10minutes", "30minutes", "1days", "5hours"
+ */
+function parseDuration(duration: string): number {
+  const match = duration.match(/^(\d+)(minutes?|hours?|days?)$/i);
+
+  if (!match) {
+    throw new Error('无效的duration格式,支持格式: "10minutes", "5hours", "1days"');
+  }
+
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+
+  const msPerUnit: Record<string, number> = {
+    'minute': 60 * 1000,
+    'minutes': 60 * 1000,
+    'hour': 60 * 60 * 1000,
+    'hours': 60 * 60 * 1000,
+    'day': 24 * 60 * 60 * 1000,
+    'days': 24 * 60 * 60 * 1000,
+  };
+
+  return value * msPerUnit[unit];
+}
+
+/**
+ * 计算deadline时间
+ */
+function calculateDeadline(duration: string): Date {
+  const now = new Date();
+  const durationMs = parseDuration(duration);
+  return new Date(now.getTime() + durationMs);
+}
+
+/**
  * 创建Meme事件合约
  */
 export async function createMemeEvent(
@@ -47,6 +82,9 @@ export async function createMemeEvent(
     const yesPool = data.creator_side === 'yes' ? data.initial_pool_amount : 0;
     const noPool = data.creator_side === 'no' ? data.initial_pool_amount : 0;
 
+    // 计算deadline
+    const deadline = calculateDeadline(data.duration);
+
     // 创建事件(待匹配状态)
     const result = await client.query(
       `INSERT INTO meme_events
@@ -62,7 +100,7 @@ export async function createMemeEvent(
         data.initial_pool_amount,
         yesPool,
         noPool,
-        data.deadline,
+        deadline,
       ]
     );
 
@@ -323,7 +361,12 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT * FROM meme_events
+    `SELECT *,
+       CASE
+         WHEN status = 'settled' AND settled_at IS NOT NULL THEN settled_at
+         ELSE deadline
+       END AS deadline_after_settlement
+     FROM meme_events
      ${whereClause}
      ORDER BY created_at DESC
      LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
@@ -338,7 +381,13 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
  */
 export async function getEventById(eventId: number): Promise<MemeEvent | null> {
   const result = await pool.query(
-    'SELECT * FROM meme_events WHERE id = $1',
+    `SELECT *,
+       CASE
+         WHEN status = 'settled' AND settled_at IS NOT NULL THEN settled_at
+         ELSE deadline
+       END AS deadline_after_settlement
+     FROM meme_events
+     WHERE id = $1`,
     [eventId]
   );
 

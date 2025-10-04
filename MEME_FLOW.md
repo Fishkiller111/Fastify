@@ -7,9 +7,11 @@
 - `contract_address`: 目标合约地址
 - `creator_side`: 创建者选择的方向 (yes 或 no)
 - `initial_pool_amount`: 初始资金池金额
-- `deadline`: 结算截止时间 (ISO 8601格式)
+- `duration`: 持续时间 (支持 "10minutes", "30minutes", "5hours", "1days" 等格式)
 
 **初始状态**: `pending_match` (待匹配)
+
+**deadline计算**: 当前时间 + duration
 
 **示例请求**:
 ```json
@@ -21,9 +23,14 @@ Authorization: Bearer {token}
   "contract_address": "0x123456789abcdef",
   "creator_side": "yes",
   "initial_pool_amount": 1000,
-  "deadline": "2025-10-05T00:00:00Z"
+  "duration": "30minutes"
 }
 ```
+
+**支持的duration格式**:
+- 分钟: "10minutes", "30minutes", "60minutes"
+- 小时: "1hours", "5hours", "24hours"
+- 天: "1days", "7days", "30days"
 
 ## 2. 匹配机制
 
