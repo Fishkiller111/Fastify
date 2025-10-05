@@ -62,6 +62,7 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.1",
+    "https-proxy-agent": "^7.0.6",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3"
   },
