@@ -13,13 +13,13 @@ import { getTokenName, getTokenNames, checkTokenLaunchStatus } from './token-ser
 
 /**
  * 解析duration字符串并返回毫秒数
- * 支持格式: "10minutes", "30minutes", "1days", "5hours"
+ * 支持格式: "10minutes", "30minutes", "1days", "5hours", "72h", "45m", "2d"
  */
 function parseDuration(duration: string): number {
-  const match = duration.match(/^(\d+)(minutes?|hours?|days?)$/i);
+  const match = duration.match(/^(\d+)(minutes?|hours?|days?|[mhd])$/i);
 
   if (!match) {
-    throw new Error('无效的duration格式,支持格式: "10minutes", "5hours", "1days"');
+    throw new Error('无效的duration格式,支持格式: "10minutes", "5hours", "1days", "72h", "45m", "2d"');
   }
 
   const value = parseInt(match[1]);
@@ -28,10 +28,13 @@ function parseDuration(duration: string): number {
   const msPerUnit: Record<string, number> = {
     'minute': 60 * 1000,
     'minutes': 60 * 1000,
+    'm': 60 * 1000,
     'hour': 60 * 60 * 1000,
     'hours': 60 * 60 * 1000,
+    'h': 60 * 60 * 1000,
     'day': 24 * 60 * 60 * 1000,
     'days': 24 * 60 * 60 * 1000,
+    'd': 24 * 60 * 60 * 1000,
   };
 
   return value * msPerUnit[unit];

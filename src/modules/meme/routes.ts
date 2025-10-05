@@ -29,8 +29,8 @@ async function memeRoutes(fastify: FastifyInstance) {
           initial_pool_amount: { type: 'number', description: '初始资金池金额' },
           duration: {
             type: 'string',
-            description: '持续时间,支持格式: "10minutes", "30minutes", "5hours", "1days"',
-            examples: ['10minutes', '30minutes', '5hours', '1days']
+            description: '持续时间,支持格式: "10minutes", "30minutes", "5hours", "1days", "72h", "45m", "2d"',
+            examples: ['10minutes', '30minutes', '5hours', '1days', '72h', '45m', '2d']
           },
         },
       },
