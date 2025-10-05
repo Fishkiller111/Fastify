@@ -67,7 +67,7 @@ export interface PlaceBetRequest {
 // 结算事件请求接口
 export interface SettleEventRequest {
   event_id: number;
-  is_launched: boolean;
+  is_launched?: boolean; // 可选参数，如果不提供则自动通过 DexScreener API 判断
 }
 
 // 事件列表查询参数

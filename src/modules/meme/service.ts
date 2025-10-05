@@ -9,7 +9,7 @@ import type {
   GetUserBetsQuery,
 } from './types.js';
 import EventKlineService from '../kline/service.js';
-import { getTokenName, getTokenNames } from './token-service.js';
+import { getTokenName, getTokenNames, checkTokenLaunchStatus } from './token-service.js';
 
 /**
  * 解析duration字符串并返回毫秒数
@@ -285,8 +285,33 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
       throw new Error('未到结算时间');
     }
 
+    // 确定发射状态
+    let isLaunched: boolean;
+
+    if (data.is_launched !== undefined) {
+      // 如果手动指定了发射状态，直接使用
+      console.log(`\n📋 使用手动指定的发射状态: ${data.is_launched}`);
+      isLaunched = data.is_launched;
+    } else {
+      // 否则通过 DexScreener API 自动判断
+      console.log(`\n🤖 未指定发射状态，开始自动判断...`);
+      
+      if (!event.contract_address) {
+        throw new Error('缺少合约地址，无法自动判断发射状态');
+      }
+
+      const launchStatus = await checkTokenLaunchStatus(event.type, event.contract_address);
+
+      if (launchStatus === null) {
+        throw new Error('自动判断发射状态失败，请手动指定 is_launched 参数');
+      }
+
+      isLaunched = launchStatus;
+      console.log(`\n✅ 自动判断完成，发射状态: ${isLaunched ? '成功' : '失败'}`);
+    }
+
     // 确定获胜方
-    const winnerSide = data.is_launched ? 'yes' : 'no';
+    const winnerSide = isLaunched ? 'yes' : 'no';
     const totalPool = parseFloat(event.yes_pool) + parseFloat(event.no_pool);
     const winnerPool = parseFloat(winnerSide === 'yes' ? event.yes_pool : event.no_pool);
 
@@ -295,7 +320,7 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
       `UPDATE meme_events
        SET status = 'settled', is_launched = $1, settled_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
-      [data.is_launched, data.event_id]
+      [isLaunched, data.event_id]
     );
 
     // 获取所有获胜的投注

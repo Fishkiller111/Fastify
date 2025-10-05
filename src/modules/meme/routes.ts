@@ -120,15 +120,21 @@ async function memeRoutes(fastify: FastifyInstance) {
   // 结算事件（管理员操作）
   fastify.post('/events/settle', {
     schema: {
-      description: '结算Meme事件',
+      description: '结算Meme事件（is_launched 可选，不提供时自动通过 DexScreener API 判断）',
       tags: ['Meme合约'],
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['event_id', 'is_launched'],
+        required: ['event_id'],
         properties: {
-          event_id: { type: 'number' },
-          is_launched: { type: 'boolean' },
+          event_id: { 
+            type: 'number',
+            description: '事件ID'
+          },
+          is_launched: { 
+            type: 'boolean',
+            description: '是否发射成功（可选）。不提供时自动判断：pumpfun(pumpswap=成功,pumpfun=失败) bonk(raydium=成功,launchlab=失败)'
+          },
         },
       },
       response: {

@@ -26,11 +26,20 @@ interface JWTConfig {
   expiresIn: string;
 }
 
+// Redis配置接口
+interface RedisConfig {
+  host: string;
+  port: number;
+  password: string;
+  db: number;
+}
+
 // 应用配置接口
 interface AppConfig {
   server: ServerConfig;
   database: DatabaseConfig;
   jwt: JWTConfig;
+  redis: RedisConfig;
 }
 
 // 配置对象
@@ -50,7 +59,13 @@ const config: AppConfig = {
     secret: process.env.JWT_SECRET || 'fastify_secret_key',
     expiresIn: process.env.JWT_EXPIRES_IN || '1h',
   },
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || '',
+    db: parseInt(process.env.REDIS_DB || '0', 10),
+  },
 };
 
 export default config;
-export type { DatabaseConfig, ServerConfig, JWTConfig, AppConfig };
+export type { DatabaseConfig, ServerConfig, JWTConfig, RedisConfig, AppConfig };

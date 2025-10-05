@@ -3,6 +3,7 @@ import config from './config/index.js';
 import jwtPlugin from './plugins/jwt.js';
 import authPlugin from './plugins/auth.js';
 import registerRoutes from './routes/index.js';
+import { startAutoSettleJob } from './modules/meme/auto-settle.js';
 
 // 创建Fastify实例
 const app = fastify({ logger: true });
@@ -72,6 +73,9 @@ const start = async () => {
     await app.listen({ port: config.server.port, host: config.server.host });
     console.log(`服务器运行在 http://${config.server.host}:${config.server.port}`);
     console.log(`API文档地址: http://${config.server.host}:${config.server.port}/docs`);
+    
+    // 启动自动结算定时任务
+    startAutoSettleJob();
   } catch (err) {
     console.error(err);
     process.exit(1);
