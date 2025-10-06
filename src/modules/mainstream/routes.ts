@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   CreateMainstreamEventRequest,
   GetBigCoinsQuery,
+  AddBigCoinRequest,
 } from './types.js';
 import type { PlaceBetRequest } from '../meme/types.js';
 import * as MainstreamService from './service.js';
@@ -11,6 +12,52 @@ import { wsManager } from '../kline/websocket.js';
  * 主流币事件合约路由
  */
 async function mainstreamRoutes(fastify: FastifyInstance) {
+  // 添加主流币（管理员操作）
+  fastify.post('/coins', {
+    schema: {
+      description: '添加新的主流币',
+      tags: ['主流币合约'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['symbol', 'name', 'contract_address'],
+        properties: {
+          symbol: { type: 'string', description: '币种代号（如 BTC, ETH）' },
+          name: { type: 'string', description: '币种名称' },
+          contract_address: { type: 'string', description: 'BSC链上的合约地址' },
+          chain: { type: 'string', default: 'BSC', description: '链名称' },
+          decimals: { type: 'number', default: 18, description: '小数位数' },
+          is_active: { type: 'boolean', default: true, description: '是否激活' },
+        },
+      },
+      response: {
+        201: {
+          type: 'object',
+          properties: {
+            id: { type: 'number' },
+            symbol: { type: 'string' },
+            name: { type: 'string' },
+            contract_address: { type: 'string' },
+            chain: { type: 'string' },
+            decimals: { type: 'number' },
+            is_active: { type: 'boolean' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' },
+          },
+        },
+      },
+    },
+    preHandler: fastify.adminAuth(['system_config']),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = request.body as AddBigCoinRequest;
+      const coin = await MainstreamService.addBigCoin(body);
+      reply.code(201).send(coin);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 获取所有主流币列表
   fastify.get('/coins', {
     schema: {

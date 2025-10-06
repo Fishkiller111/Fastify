@@ -4,6 +4,7 @@ import type {
   CreateMainstreamEventRequest,
   MainstreamEventResponse,
   GetBigCoinsQuery,
+  AddBigCoinRequest,
 } from './types.js';
 import type { MemeBet, PlaceBetRequest } from '../meme/types.js';
 import EventKlineService from '../kline/service.js';
@@ -101,6 +102,49 @@ export async function getBigCoinByAddress(contractAddress: string): Promise<BigC
   );
 
   return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
+ * 添加新的主流币
+ */
+export async function addBigCoin(data: AddBigCoinRequest): Promise<BigCoin> {
+  const {
+    symbol,
+    name,
+    contract_address,
+    chain = 'BSC',
+    decimals = 18,
+    is_active = true,
+  } = data;
+
+  // 检查合约地址是否已存在
+  const existing = await pool.query(
+    'SELECT id FROM big_coins WHERE contract_address = $1',
+    [contract_address]
+  );
+
+  if (existing.rows.length > 0) {
+    throw new Error('该合约地址已存在');
+  }
+
+  // 检查币种代号是否已存在
+  const existingSymbol = await pool.query(
+    'SELECT id FROM big_coins WHERE symbol = $1',
+    [symbol]
+  );
+
+  if (existingSymbol.rows.length > 0) {
+    throw new Error('该币种代号已存在');
+  }
+
+  const result = await pool.query(
+    `INSERT INTO big_coins (symbol, name, contract_address, chain, decimals, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [symbol, name, contract_address, chain, decimals, is_active]
+  );
+
+  return result.rows[0];
 }
 
 /**
@@ -448,6 +492,7 @@ export async function placeMainstreamBet(
 export default {
   getBigCoins,
   getBigCoinByAddress,
+  addBigCoin,
   createMainstreamEvent,
   getMainstreamEvents,
   getMainstreamEventById,

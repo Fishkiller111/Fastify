@@ -56,3 +56,13 @@ export interface GetBigCoinsQuery {
   limit?: number;
   offset?: number;
 }
+
+// 添加主流币请求
+export interface AddBigCoinRequest {
+  symbol: string;
+  name: string;
+  contract_address: string;
+  chain?: string;
+  decimals?: number;
+  is_active?: boolean;
+}

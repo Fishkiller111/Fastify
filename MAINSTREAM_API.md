@@ -44,7 +44,54 @@
 
 所有主流币 API 端点前缀为 `/api/mainstream`
 
-### 1. 获取主流币列表
+### 1. 添加主流币（管理员）
+
+**POST** `/api/mainstream/coins`
+
+添加新的主流币到系统。
+
+**需要认证**: ✅ (Bearer Token - 需要管理员权限 `system_config`)
+
+**请求体**:
+```json
+{
+  "symbol": "DOGE",
+  "name": "Dogecoin",
+  "contract_address": "0xbA2aE424d960c26247Dd6c32edC70B295c744C43",
+  "chain": "BSC",
+  "decimals": 18,
+  "is_active": true
+}
+```
+
+**参数说明**:
+- `symbol` (必填): 币种代号,如 BTC、ETH
+- `name` (必填): 币种全称
+- `contract_address` (必填): BSC链上的合约地址
+- `chain` (可选, 默认 "BSC"): 链名称
+- `decimals` (可选, 默认 18): 小数位数
+- `is_active` (可选, 默认 true): 是否激活
+
+**响应示例** (201 Created):
+```json
+{
+  "id": 7,
+  "symbol": "DOGE",
+  "name": "Dogecoin",
+  "contract_address": "0xbA2aE424d960c26247Dd6c32edC70B295c744C43",
+  "chain": "BSC",
+  "decimals": 18,
+  "is_active": true,
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+**可能的错误**:
+- `400 Bad Request`: 合约地址或币种代号已存在
+- `403 Forbidden`: 无管理员权限
+
+### 2. 获取主流币列表
 
 **GET** `/api/mainstream/coins`
 
@@ -73,7 +120,7 @@
 ]
 ```
 
-### 2. 创建主流币事件合约
+### 3. 创建主流币事件合约
 
 **POST** `/api/mainstream/events`
 
@@ -128,7 +175,7 @@
 }
 ```
 
-### 3. 获取主流币事件列表
+### 4. 获取主流币事件列表
 
 **GET** `/api/mainstream/events`
 
@@ -167,7 +214,7 @@
 ]
 ```
 
-### 4. 获取单个主流币事件详情
+### 5. 获取单个主流币事件详情
 
 **GET** `/api/mainstream/events/:id`
 
@@ -178,7 +225,7 @@
 
 **响应**: 同创建事件响应格式
 
-### 5. 对主流币事件下注
+### 6. 对主流币事件下注
 
 **POST** `/api/mainstream/bets`
 
@@ -305,6 +352,22 @@ npm run migrate
 ```
 
 ## 使用示例
+
+### 添加新的主流币
+
+```bash
+curl -X POST http://localhost:3000/api/mainstream/coins \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "DOGE",
+    "name": "Dogecoin",
+    "contract_address": "0xbA2aE424d960c26247Dd6c32edC70B295c744C43",
+    "chain": "BSC",
+    "decimals": 18,
+    "is_active": true
+  }'
+```
 
 ### 创建 BTC 预测合约
 
