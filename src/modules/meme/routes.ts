@@ -8,6 +8,7 @@ import {
 } from './types.js';
 import * as MemeService from './service.js';
 import { wsManager } from '../kline/websocket.js';
+import EventKlineService from '../kline/service.js';
 
 /**
  * Meme事件合约路由
@@ -107,10 +108,13 @@ async function memeRoutes(fastify: FastifyInstance) {
       const userId = (request as any).user.userId;
       const body = request.body as PlaceBetRequest;
       const bet = await MemeService.placeBet(userId, body);
-      
+
+      // 保存K线数据到数据库
+      await EventKlineService.recordOddsSnapshot(body.event_id);
+
       // 广播赔率更新到WebSocket订阅者
       await wsManager.broadcast(body.event_id);
-      
+
       reply.code(201).send(bet);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });

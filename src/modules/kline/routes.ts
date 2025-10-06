@@ -29,6 +29,11 @@ async function klineRoutes(fastify: FastifyInstance) {
           startTime: { type: 'number' },
           endTime: { type: 'number' },
           limit: { type: 'number' },
+          source: {
+            type: 'string',
+            enum: ['pumpfun', 'bonk'],
+            description: '来源页面：pumpfun或bonk，用于前端确定颜色方案'
+          },
         },
       },
       response: {
@@ -51,6 +56,7 @@ async function klineRoutes(fastify: FastifyInstance) {
               yes_pool: { type: 'number' },
               no_pool: { type: 'number' },
               total_bets: { type: 'number' },
+              source: { type: 'string', description: '来源页面标识' },
             },
           },
         },
@@ -59,14 +65,20 @@ async function klineRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { eventId } = request.params as { eventId: number };
-      const query = request.query as Omit<EventKlineQueryParams, 'event_id'>;
+      const query = request.query as Omit<EventKlineQueryParams, 'event_id'> & { source?: string };
 
       const klines = await EventKlineService.getHistoricalKlines({
         event_id: eventId,
         ...query,
       });
 
-      reply.send(klines);
+      // 将source参数附加到每个K线数据项中，方便前端使用
+      const klinesWithSource = klines.map(kline => ({
+        ...kline,
+        source: query.source || 'pumpfun' // 默认为pumpfun
+      }));
+
+      reply.send(klinesWithSource);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -84,6 +96,16 @@ async function klineRoutes(fastify: FastifyInstance) {
           eventId: { type: 'number' },
         },
       },
+      querystring: {
+        type: 'object',
+        properties: {
+          source: {
+            type: 'string',
+            enum: ['pumpfun', 'bonk'],
+            description: '来源页面：pumpfun或bonk，用于前端确定颜色方案'
+          },
+        },
+      },
       response: {
         200: {
           type: 'object',
@@ -94,6 +116,7 @@ async function klineRoutes(fastify: FastifyInstance) {
             yes_pool: { type: 'number' },
             no_pool: { type: 'number' },
             timestamp: { type: 'number' },
+            source: { type: 'string', description: '来源页面标识' },
           },
         },
       },
@@ -101,13 +124,17 @@ async function klineRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { eventId } = request.params as { eventId: number };
+      const query = request.query as { source?: string };
       const currentOdds = await EventKlineService.getCurrentOdds(eventId);
 
       if (!currentOdds) {
         return reply.code(404).send({ error: '事件不存在' });
       }
 
-      reply.send(currentOdds);
+      reply.send({
+        ...currentOdds,
+        source: query.source || 'pumpfun' // 默认为pumpfun
+      });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
