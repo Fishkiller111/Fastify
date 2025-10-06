@@ -5,6 +5,7 @@ import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
 import klineRoutes from '../modules/kline/routes.js';
 import memeRoutes from '../modules/meme/routes.js';
+import mainstreamRoutes from '../modules/mainstream/routes.js';
 import { klineWebSocketRoute } from '../modules/kline/websocket.js';
 
 /**
@@ -29,6 +30,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册 Meme事件合约路由
   fastify.register(memeRoutes, { prefix: '/api/meme' });
+
+  // 注册主流币事件合约路由
+  fastify.register(mainstreamRoutes, { prefix: '/api/mainstream' });
 
   // 注册 K线WebSocket路由
   fastify.register(klineWebSocketRoute);
