@@ -404,14 +404,25 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
 
   const events = result.rows;
 
-  // 批量查询代币名称
-  const tokenNameMap = await getTokenNames(events);
+  // 为每个事件处理 token_name
+  // 优先使用数据库中的 token_name,如果为空则查询 API
+  const eventsWithTokenNames = await Promise.all(
+    events.map(async (event) => {
+      let tokenName = event.token_name; // 优先使用数据库中的值
 
-  // 为每个事件添加 token_name
-  return events.map((event) => ({
-    ...event,
-    token_name: event.contract_address ? tokenNameMap.get(event.contract_address) || null : null,
-  }));
+      // 如果数据库中没有 token_name,则查询 API 并更新数据库
+      if (!tokenName && event.contract_address) {
+        tokenName = await getTokenName(event.type, event.contract_address, event.id);
+      }
+
+      return {
+        ...event,
+        token_name: tokenName,
+      };
+    })
+  );
+
+  return eventsWithTokenNames;
 }
 
 /**
@@ -434,8 +445,11 @@ export async function getEventById(eventId: number): Promise<MemeEvent | null> {
     return null;
   }
 
-  // 查询代币名称
-  const tokenName = await getTokenName(event.type, event.contract_address);
+  // 优先使用数据库中的 token_name,如果为空则查询 API
+  let tokenName = event.token_name;
+  if (!tokenName && event.contract_address) {
+    tokenName = await getTokenName(event.type, event.contract_address, event.id);
+  }
 
   return {
     ...event,

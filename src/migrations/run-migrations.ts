@@ -1,6 +1,7 @@
 import { up as initDatabase } from './001-init-database.js';
 import { up as addBigCoins } from './002-add-big-coins.js';
 import { up as addMainstreamType } from './003-add-mainstream-type.js';
+import { up as addTokenName } from './004-add-token-name.js';
 
 // 运行数据库迁移
 async function runMigrations() {
@@ -11,6 +12,7 @@ async function runMigrations() {
     await initDatabase();
     await addBigCoins();
     await addMainstreamType();
+    await addTokenName();
 
     console.log('🎉 所有迁移已完成');
     process.exit(0);

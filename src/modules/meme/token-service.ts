@@ -7,6 +7,7 @@
 import https from 'https';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import redis from '../../config/redis.js';
+import pool from '../../config/database.js';
 import type { MemeEventType } from './types.js';
 
 /**
@@ -157,23 +158,44 @@ async function fetchBonkTokenName(contractAddress: string): Promise<string | nul
 
 /**
  * 根据类型和合约地址查询代币名称
+ * @param eventId 可选的事件ID,如果提供则在获取token name后更新数据库
  */
 export async function getTokenName(
   type: MemeEventType,
-  contractAddress: string | undefined
+  contractAddress: string | undefined,
+  eventId?: number
 ): Promise<string | null> {
   if (!contractAddress) {
     return null;
   }
 
+  let tokenName: string | null = null;
+
   switch (type) {
     case 'pumpfun':
-      return await fetchPumpfunTokenName(contractAddress);
+      tokenName = await fetchPumpfunTokenName(contractAddress);
+      break;
     case 'bonk':
-      return await fetchBonkTokenName(contractAddress);
+      tokenName = await fetchBonkTokenName(contractAddress);
+      break;
     default:
       return null;
   }
+
+  // 如果获取到 token name 且提供了 eventId,则更新数据库
+  if (tokenName && eventId) {
+    try {
+      await pool.query(
+        'UPDATE meme_events SET token_name = $1 WHERE id = $2 AND token_name IS NULL',
+        [tokenName, eventId]
+      );
+      console.log(`   💾 已更新事件 ${eventId} 的 token_name: "${tokenName}"`);
+    } catch (error) {
+      console.error(`   ❌ 更新 token_name 到数据库失败:`, error);
+    }
+  }
+
+  return tokenName;
 }
 
 /**
