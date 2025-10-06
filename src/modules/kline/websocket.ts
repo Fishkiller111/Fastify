@@ -92,7 +92,7 @@ export async function klineWebSocketRoute(fastify: FastifyInstance) {
     socket.on('message', (message: any) => {
       try {
         const data = JSON.parse(message.toString());
-        
+
         if (data.type === 'ping') {
           socket.send(JSON.stringify({ type: 'pong' }));
         }

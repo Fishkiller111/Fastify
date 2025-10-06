@@ -9,13 +9,21 @@ import { startAutoSettleJob } from './modules/meme/auto-settle.js';
 const app = fastify({ logger: true });
 
 // 注册 WebSocket 插件
-await app.register(import('@fastify/websocket'));
+await app.register(import('@fastify/websocket'), {
+  options: {
+    maxPayload: 1048576, // 1MB
+    verifyClient: (info, next) => {
+      // 允许所有连接
+      next(true);
+    }
+  }
+});
 
 // 允许跨域访问（暂时放开所有域）
 await app.register(import('@fastify/cors'), {
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Upgrade', 'Connection'],
   credentials: true
 });
 
@@ -60,7 +68,7 @@ await app.register(jwtPlugin);
 await app.register(authPlugin);
 
 // 注册路由
-app.register(registerRoutes);
+await app.register(registerRoutes);
 
 // 根路由
 app.get('/', async () => {
