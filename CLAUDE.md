@@ -91,13 +91,21 @@ Each module follows this structure:
 - **Config**: Key-value storage for application configuration
   - Used for login method configuration and third-party service credentials
   - Examples: login_method, aliyun_sms_* settings
-- **Meme Events**: Prediction market for meme token launches
-  - Tracks betting pools (yes_pool, no_pool), odds, and settlement results
+- **Meme Events** (`meme_events`): Unified prediction market events table
+  - Supports three event types: `pumpfun`, `bonk`, `Mainstream`
+  - **Common fields**: type, contract_address, creator_side, pools, odds, status, deadline
+  - **Mainstream-specific**: big_coin_id, future_price, current_price
   - States: pending_match → active → settled
   - See MEME_FLOW.md for detailed business logic
-- **Meme Bets**: User betting records with potential and actual payouts
-- **Event Klines**: Historical odds snapshots for K-line chart visualization
+- **Big Coins** (`big_coins`): Supported major cryptocurrencies for mainstream events
+  - Fields: symbol, name, contract_address, chain (BSC), decimals, is_active
+  - Used by mainstream events to reference supported coins
+- **Meme Bets** (`meme_bets`): User betting records with potential and actual payouts
+  - Unified table for both meme and mainstream event bets
+- **Event Klines** (`klines`): Historical odds snapshots for K-line chart visualization
+  - Timestamp-based records with yes_odds, no_odds, pools, total_bets
 - **Migrations**: Version-controlled schema changes with sequential numbering
+  - Latest: 006-add-future-price.ts (adds future_price, current_price for mainstream)
 
 ## Important Implementation Notes
 
@@ -150,17 +158,53 @@ node dist/scripts/init-sms-config.js
 - Validation errors: `400 Bad Request`
 - Database errors: Caught in services, translated to user-friendly messages
 
-## Meme Event Prediction Market
+## Prediction Market System
 
-This API includes a prediction market system for meme token launches. See **MEME_FLOW.md** for complete business logic.
+This API includes two prediction market types. See **MEME_FLOW.md** for detailed business logic.
 
-### Key Architecture Patterns
+### 1. Meme Token Launch Events (`pumpfun`, `bonk`)
+Predict whether a meme token will successfully launch on specific platforms.
 
 #### State Machine
-Events transition through states: `pending_match` → `active` → `settled`
+Events transition: `pending_match` → `active` → `settled`
 - **pending_match**: Creator's side funded, waiting for counter-bets
 - **active**: Both sides have bets, countdown to deadline begins
-- **settled**: Result determined, payouts distributed
+- **settled**: Result determined via DexScreener API, payouts distributed
+
+#### Settlement Logic
+- **pumpfun**: Success if on `pumpswap`, failure if on `pumpfun`
+- **bonk**: Success if on `raydium`, failure if on `launchlab`
+- Uses `src/modules/meme/token-service.ts` `checkTokenLaunchStatus()` function
+
+### 2. Mainstream Coin Price Events (`Mainstream`)
+Predict whether a major cryptocurrency will reach a target price by deadline.
+
+#### Key Features
+- **Contract Source**: Uses `big_coins` table for supported coins (BSC chain)
+- **Target Price**: User specifies `future_price` when creating event
+- **Price Oracle**: DexScreener API queries BSC chain token prices
+- **Settlement**: Compares `current_price >= future_price` at deadline
+
+#### Critical Implementation
+```typescript
+// Creating mainstream event
+{
+  "type": "Mainstream",
+  "big_coin_id": 1,              // References big_coins table
+  "future_price": 50000,         // Target price in USD
+  "creator_side": "yes",         // yes = will reach, no = won't reach
+  "initial_pool_amount": 100,
+  "duration": "1days"
+}
+```
+
+#### BSC Price Query
+- Function: `fetchBSCTokenPrice()` in `src/modules/mainstream/service.ts`
+- API: `https://api.dexscreener.com/latest/dex/tokens/{address}`
+- Filters: `chainId === 'bsc'` or `'binance'`
+- Returns: USD price from first matching pair
+
+### Shared Architecture Patterns
 
 #### Dynamic Odds Calculation
 Odds recalculate after each bet based on pool ratios:
@@ -176,9 +220,27 @@ NO_odds = (YES_pool / total_pool) × 100
 - **Message Format**: `{ type: 'odds_update', data: { yes_odds, no_odds, timestamp } }`
 
 #### Settlement & Payout
-- **Trigger**: Admin settlement after deadline
+- **Trigger**: Auto-settlement via cron job (every minute) or manual admin trigger
 - **Payout Formula**: `user_payout = (user_bet / winning_pool) × total_pool`
 - **Transaction Safety**: All operations wrapped in database transactions
+
+#### Auto-Settlement System
+- **Location**: `src/modules/meme/auto-settle.ts`
+- **Schedule**: Cron job runs every minute via `node-cron`
+- **Startup**: Auto-starts in `src/server.ts` via `startAutoSettleJob()`
+- **Process**:
+  1. Queries all events where `status = 'active' AND deadline <= NOW()`
+  2. For meme events: Calls `checkTokenLaunchStatus()`
+  3. For mainstream events: Calls `settleMainstreamEvent()`
+  4. Distributes payouts to winners
+  5. Logs detailed settlement information
+
+#### K-line Data Recording
+- **Purpose**: Historical odds tracking for chart visualization
+- **Storage**: `klines` table with timestamp-based records
+- **Timing**: After transaction commit to avoid deadlocks
+- **Pattern**: K-line recording moved outside database transactions
+- **Non-blocking**: Uses try-catch to prevent K-line failures from affecting main flow
 
 ### Critical Implementation Details
 
@@ -187,6 +249,7 @@ Supports flexible time formats in event creation:
 - Minutes: "10minutes", "30minutes"
 - Hours: "5hours", "24hours"
 - Days: "1days", "7days"
+- Short forms: "10m", "5h", "2d"
 
 #### Deadline After Settlement
 API responses include `deadline_after_settlement` field:
@@ -197,6 +260,27 @@ API responses include `deadline_after_settlement` field:
 In `pending_match` state, only counter-side bets allowed:
 - Creator bets YES → only NO bets accepted
 - First counter-bet triggers state change to `active`
+
+#### Transaction Best Practices
+**Critical Pattern**: K-line recording and WebSocket broadcasting must occur AFTER transaction commit:
+
+```typescript
+await client.query('COMMIT');
+
+// K-line recording (outside transaction, non-blocking)
+try {
+  await EventKlineService.recordOddsSnapshot(eventId);
+} catch (klineError) {
+  console.error('K线数据记录失败:', klineError);
+}
+
+// WebSocket broadcasting (non-blocking)
+wsManager.broadcast(eventId).catch(err => {
+  console.error('WebSocket广播失败:', err);
+});
+```
+
+**Why**: Recording K-lines inside transactions can cause deadlocks when multiple bets happen simultaneously. Always commit first, then record K-lines.
 
 ## Template Package Architecture
 
