@@ -6,6 +6,7 @@
 import cron from 'node-cron';
 import pool from '../../config/database.js';
 import { checkTokenLaunchStatus } from './token-service.js';
+import { settleMainstreamEvent } from '../mainstream/service.js';
 
 /**
  * 自动结算单个事件
@@ -132,7 +133,19 @@ export async function checkAndSettleEvents(): Promise<void> {
 
     // 逐个结算事件
     for (const event of result.rows) {
-      await settleEventAuto(event.id, event.type, event.contract_address);
+      // 根据事件类型选择结算方式
+      if (event.type === 'Mainstream') {
+        console.log(`\n🪙 ========== 自动结算主流币事件 ID: ${event.id} ==========`);
+        try {
+          await settleMainstreamEvent(event.id);
+          console.log(`   🎉 主流币事件 ${event.id} 结算完成！\n`);
+        } catch (error: any) {
+          console.error(`   🔥 主流币事件 ${event.id} 结算失败:`, error.message);
+        }
+      } else {
+        // Meme事件 (pumpfun, bonk)
+        await settleEventAuto(event.id, event.type, event.contract_address);
+      }
     }
 
     console.log(`   ✅ 本轮结算任务完成\n`);
