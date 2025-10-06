@@ -110,17 +110,18 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['type', 'contract_address', 'creator_side', 'initial_pool_amount', 'duration'],
+        required: ['type', 'big_coin_id', 'creator_side', 'initial_pool_amount', 'duration', 'future_price'],
         properties: {
           type: { type: 'string', enum: ['Mainstream'], description: '合约类型' },
-          contract_address: { type: 'string', description: '主流币合约地址（必须在主流币列表中）' },
-          creator_side: { type: 'string', enum: ['yes', 'no'], description: '创建者选择的方向' },
+          big_coin_id: { type: 'number', description: '主流币ID（对应 big_coins 表中的 id）' },
+          creator_side: { type: 'string', enum: ['yes', 'no'], description: '创建者选择的方向（yes=涨到目标价，no=未涨到目标价）' },
           initial_pool_amount: { type: 'number', description: '初始资金池金额' },
           duration: {
             type: 'string',
             description: '持续时间,支持格式: "10minutes", "30minutes", "5hours", "1days", "72h", "45m", "2d"',
             examples: ['10minutes', '30minutes', '5hours', '1days', '72h', '45m', '2d']
           },
+          future_price: { type: 'number', description: '预测的未来价格（deadline到期前币价是否能达到此价格）' },
         },
       },
       response: {
@@ -151,6 +152,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             status: { type: 'string' },
             deadline: { type: 'string' },
             created_at: { type: 'string' },
+            future_price: { type: 'string' },
           },
         },
       },
@@ -209,6 +211,8 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
               status: { type: 'string' },
               deadline: { type: 'string' },
               created_at: { type: 'string' },
+              future_price: { type: 'string', nullable: true },
+              current_price: { type: 'string', nullable: true },
             },
           },
         },
@@ -263,6 +267,8 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             status: { type: 'string' },
             deadline: { type: 'string' },
             created_at: { type: 'string' },
+            future_price: { type: 'string', nullable: true },
+            current_price: { type: 'string', nullable: true },
           },
         },
       },
@@ -277,6 +283,42 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       }
 
       reply.send(event);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 结算主流币事件（管理员操作）
+  fastify.post('/events/settle', {
+    schema: {
+      description: '结算主流币事件（自动通过 DexScreener API 查询 BSC 链上的币价）',
+      tags: ['主流币合约'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['event_id'],
+        properties: {
+          event_id: {
+            type: 'number',
+            description: '主流币事件ID'
+          },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    preHandler: fastify.adminAuth(['meme.settle']),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { event_id } = request.body as { event_id: number };
+      await MainstreamService.settleMainstreamEvent(event_id);
+      reply.send({ message: '主流币事件结算成功' });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -321,8 +363,10 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       const body = request.body as PlaceBetRequest;
       const bet = await MainstreamService.placeMainstreamBet(userId, body);
 
-      // 广播赔率更新到WebSocket订阅者
-      await wsManager.broadcast(body.event_id);
+      // 广播赔率更新到WebSocket订阅者（非阻塞）
+      wsManager.broadcast(body.event_id).catch(err => {
+        console.error('WebSocket广播失败:', err);
+      });
 
       reply.code(201).send(bet);
     } catch (error: any) {

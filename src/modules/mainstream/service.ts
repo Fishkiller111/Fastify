@@ -105,6 +105,18 @@ export async function getBigCoinByAddress(contractAddress: string): Promise<BigC
 }
 
 /**
+ * 根据ID获取主流币信息
+ */
+export async function getBigCoinById(coinId: number): Promise<BigCoin | null> {
+  const result = await pool.query(
+    'SELECT * FROM big_coins WHERE id = $1 AND is_active = true',
+    [coinId]
+  );
+
+  return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+/**
  * 添加新的主流币
  */
 export async function addBigCoin(data: AddBigCoinRequest): Promise<BigCoin> {
@@ -159,10 +171,10 @@ export async function createMainstreamEvent(
   try {
     await client.query('BEGIN');
 
-    // 验证主流币合约地址
-    const bigCoin = await getBigCoinByAddress(data.contract_address);
+    // 验证主流币ID
+    const bigCoin = await getBigCoinById(data.big_coin_id);
     if (!bigCoin) {
-      throw new Error('无效的主流币合约地址或该币种未激活');
+      throw new Error('无效的主流币ID或该币种未激活');
     }
 
     // 检查创建者余额
@@ -197,19 +209,20 @@ export async function createMainstreamEvent(
     const result = await client.query(
       `INSERT INTO meme_events
        (creator_id, type, contract_address, big_coin_id, creator_side, initial_pool_amount,
-        yes_pool, no_pool, status, deadline)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_match', $9)
+        yes_pool, no_pool, status, deadline, future_price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_match', $9, $10)
        RETURNING *`,
       [
         creatorId,
         data.type,
-        data.contract_address,
+        bigCoin.contract_address,
         bigCoin.id,
         data.creator_side,
         data.initial_pool_amount,
         yesPool,
         noPool,
         deadline,
+        data.future_price,
       ]
     );
 
@@ -255,6 +268,8 @@ export async function createMainstreamEvent(
       deadline: event.deadline,
       created_at: event.created_at,
       settled_at: event.settled_at,
+      future_price: event.future_price,
+      current_price: event.current_price,
     };
   } catch (error) {
     await client.query('ROLLBACK');
@@ -308,6 +323,8 @@ export async function getMainstreamEvents(
     deadline: row.deadline,
     created_at: row.created_at,
     settled_at: row.settled_at,
+    future_price: row.future_price,
+    current_price: row.current_price,
   }));
 }
 
@@ -355,6 +372,8 @@ export async function getMainstreamEventById(eventId: number): Promise<Mainstrea
     deadline: row.deadline,
     created_at: row.created_at,
     settled_at: row.settled_at,
+    future_price: row.future_price,
+    current_price: row.current_price,
   };
 }
 
@@ -475,12 +494,188 @@ export async function placeMainstreamBet(
       [data.event_id, userId, data.bet_type, data.bet_amount, oddsAtBet]
     );
 
-    // 记录K线数据
-    await EventKlineService.recordOddsSnapshot(data.event_id);
-
     await client.query('COMMIT');
 
+    // 记录K线数据（事务外执行，避免死锁）
+    try {
+      await EventKlineService.recordOddsSnapshot(data.event_id);
+    } catch (klineError) {
+      console.error('K线数据记录失败:', klineError);
+      // K线记录失败不影响主流程
+    }
+
     return betResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 从DexScreener API获取BSC链上的代币价格
+ */
+async function fetchBSCTokenPrice(contractAddress: string): Promise<number | null> {
+  console.log(`\n🔍 ========== 开始查询 BSC 代币价格 (DexScreener) ==========`);
+  console.log(`   Token 地址: ${contractAddress}`);
+
+  try {
+    const https = await import('https');
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`;
+
+    const data: string = await new Promise((resolve, reject) => {
+      https.get(url, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+          }
+        });
+      }).on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    const response = JSON.parse(data);
+
+    if (!response.pairs || response.pairs.length === 0) {
+      console.log(`   ⚠️ 未找到交易对信息`);
+      return null;
+    }
+
+    // 筛选BSC链上的交易对
+    const bscPairs = response.pairs.filter((pair: any) =>
+      pair.chainId === 'bsc' || pair.chainId === 'binance'
+    );
+
+    if (bscPairs.length === 0) {
+      console.log(`   ⚠️ 未找到 BSC 链上的交易对`);
+      return null;
+    }
+
+    // 获取第一个BSC交易对的USD价格
+    const priceUsd = parseFloat(bscPairs[0].priceUsd);
+
+    if (isNaN(priceUsd)) {
+      console.log(`   ⚠️ 价格数据无效`);
+      return null;
+    }
+
+    console.log(`   ✅ 查询成功，当前价格: $${priceUsd}`);
+    return priceUsd;
+  } catch (error: any) {
+    console.error(`   ❌ 查询失败:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * 结算主流币事件
+ */
+export async function settleMainstreamEvent(eventId: number): Promise<void> {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 获取事件信息
+    const eventResult = await client.query(
+      'SELECT * FROM meme_events WHERE id = $1 AND type = $2 AND status = $3',
+      [eventId, 'Mainstream', 'active']
+    );
+
+    if (eventResult.rows.length === 0) {
+      throw new Error('主流币事件不存在或状态不正确');
+    }
+
+    const event = eventResult.rows[0];
+
+    // 检查是否到达deadline
+    if (new Date() < new Date(event.deadline)) {
+      throw new Error('未到结算时间');
+    }
+
+    if (!event.contract_address) {
+      throw new Error('缺少合约地址，无法查询价格');
+    }
+
+    if (!event.future_price) {
+      throw new Error('缺少目标价格，无法判断结果');
+    }
+
+    // 查询当前BSC链上的币价
+    console.log(`\n📊 开始查询 BSC 链上的代币价格...`);
+    const currentPrice = await fetchBSCTokenPrice(event.contract_address);
+
+    if (currentPrice === null) {
+      throw new Error('无法获取当前币价，结算失败');
+    }
+
+    console.log(`\n📈 价格对比:`);
+    console.log(`   目标价格 (future_price): $${event.future_price}`);
+    console.log(`   当前价格 (current_price): $${currentPrice}`);
+
+    // 判断是否达到目标价格
+    const isReached = currentPrice >= parseFloat(event.future_price);
+    console.log(`   结果: ${isReached ? '✅ 达到目标价格' : '❌ 未达到目标价格'}`);
+
+    // 确定获胜方 (yes = 达到目标价格, no = 未达到目标价格)
+    const winnerSide = isReached ? 'yes' : 'no';
+
+    // 更新事件状态和价格
+    await client.query(
+      `UPDATE meme_events
+       SET status = 'settled', current_price = $1, settled_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [currentPrice, eventId]
+    );
+
+    // 获取所有获胜的投注
+    const winningBets = await client.query(
+      'SELECT * FROM meme_bets WHERE event_id = $1 AND bet_type = $2 AND status = $3',
+      [eventId, winnerSide, 'pending']
+    );
+
+    console.log(`\n💰 开始分配奖金给获胜者 (${winnerSide} 方)...`);
+    console.log(`   获胜投注数量: ${winningBets.rows.length}`);
+
+    // 分配奖金给获胜者
+    for (const bet of winningBets.rows) {
+      const betAmount = parseFloat(bet.bet_amount);
+      const oddsAtBet = parseFloat(bet.odds_at_bet);
+
+      // 赔付 = 本金 × (1 + 赔率/100)
+      const payout = (betAmount * (1 + oddsAtBet / 100)).toFixed(2);
+
+      // 更新投注状态和实际奖金
+      await client.query(
+        'UPDATE meme_bets SET status = $1, actual_payout = $2 WHERE id = $3',
+        ['won', payout, bet.id]
+      );
+
+      // 发放奖金给用户
+      await client.query(
+        'UPDATE users SET balance = balance + $1 WHERE id = $2',
+        [payout, bet.user_id]
+      );
+
+      console.log(`   用户 ${bet.user_id}: 投注 $${betAmount}, 赔付 $${payout}`);
+    }
+
+    // 更新失败的投注
+    const loserSide = winnerSide === 'yes' ? 'no' : 'yes';
+    await client.query(
+      'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4',
+      ['lost', eventId, loserSide, 'pending']
+    );
+
+    console.log(`\n✅ 主流币事件结算完成`);
+
+    await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -492,9 +687,11 @@ export async function placeMainstreamBet(
 export default {
   getBigCoins,
   getBigCoinByAddress,
+  getBigCoinById,
   addBigCoin,
   createMainstreamEvent,
   getMainstreamEvents,
   getMainstreamEventById,
   placeMainstreamBet,
+  settleMainstreamEvent,
 };

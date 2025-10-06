@@ -3,6 +3,7 @@ import { up as addBigCoins } from './002-add-big-coins.js';
 import { up as addMainstreamType } from './003-add-mainstream-type.js';
 import { up as addTokenName } from './004-add-token-name.js';
 import { up as createKlineTable } from './005-create-kline-table.js';
+import { up as addFuturePrice } from './006-add-future-price.js';
 
 // 运行数据库迁移
 async function runMigrations() {
@@ -15,6 +16,7 @@ async function runMigrations() {
     await addMainstreamType();
     await addTokenName();
     await createKlineTable();
+    await addFuturePrice();
 
     console.log('🎉 所有迁移已完成');
     process.exit(0);

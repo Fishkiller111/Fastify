@@ -17,10 +17,11 @@ export type MainstreamEventType = 'Mainstream';
 // 创建主流币事件请求
 export interface CreateMainstreamEventRequest {
   type: MainstreamEventType;
-  contract_address: string; // 主流币合约地址（必须在 big_coins 表中存在）
+  big_coin_id: number; // 主流币ID（对应 big_coins 表中的 id）
   creator_side: 'yes' | 'no';
   initial_pool_amount: number;
   duration: string; // 例如: "10minutes", "30minutes", "1days"
+  future_price: number; // 预测的未来价格
 }
 
 // 主流币事件响应
@@ -47,6 +48,8 @@ export interface MainstreamEventResponse {
   deadline: Date;
   created_at: Date;
   settled_at?: Date;
+  future_price?: string;
+  current_price?: string;
 }
 
 // 获取主流币列表查询参数
