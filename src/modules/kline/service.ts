@@ -83,6 +83,23 @@ class EventKlineService {
   }
 
   /**
+   * 获取所有原始赔率快照点(用于绘制折线图)
+   */
+  async getAllOddsSnapshots(eventId: number, startTime?: number, endTime?: number): Promise<OddsSnapshot[]> {
+    let snapshots = this.oddsSnapshots.get(eventId) || [];
+
+    // 时间范围过滤
+    if (startTime) {
+      snapshots = snapshots.filter(s => s.timestamp >= startTime);
+    }
+    if (endTime) {
+      snapshots = snapshots.filter(s => s.timestamp <= endTime);
+    }
+
+    return snapshots;
+  }
+
+  /**
    * 获取历史K线数据
    */
   async getHistoricalKlines(params: EventKlineQueryParams): Promise<EventOddsKline[]> {
@@ -96,9 +113,13 @@ class EventKlineService {
       klines = klines.filter(k => k.timestamp <= params.endTime!);
     }
 
-    // 限制返回数量
-    const limit = params.limit || 500;
-    return klines.slice(-limit);
+    // 如果指定了limit,则只返回最后N条,否则返回全部历史数据
+    if (params.limit) {
+      return klines.slice(-params.limit);
+    }
+
+    // 返回全部历史K线数据用于绘制完整折线图
+    return klines;
   }
 
   /**

@@ -65,28 +65,40 @@ export const wsManager = new WebSocketManager();
  * WebSocket路由处理
  */
 export async function klineWebSocketRoute(fastify: FastifyInstance) {
-  fastify.get('/ws/kline/events/:eventId', { websocket: true }, (socket, request) => {
+  fastify.get('/ws/kline/events/:eventId', { websocket: true }, async (socket, request) => {
     const { eventId } = request.params as { eventId: string };
     const eventIdNum = parseInt(eventId, 10);
+    const queryParams = request.query as any;
+    const interval = queryParams.interval || '1m';
 
-    console.log(`🔌 新WebSocket连接: 事件 ${eventIdNum}`);
+    console.log(`🔌 新WebSocket连接: 事件 ${eventIdNum}, 周期: ${interval}`);
 
     // 订阅事件
     wsManager.subscribe(eventIdNum, socket);
 
-    // 立即发送当前赔率
-    EventKlineService.getCurrentOdds(eventIdNum)
-      .then((oddsData: any) => {
-        if (oddsData && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: 'initial',
-            data: oddsData,
-          }));
-        }
-      })
-      .catch((error: any) => {
-        console.error('获取初始赔率失败:', error);
-      });
+    try {
+      // 1. 立即发送所有原始赔率变化点(用于绘制折线图)
+      const oddsSnapshots = await EventKlineService.getAllOddsSnapshots(eventIdNum);
+
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          type: 'historical',
+          data: oddsSnapshots,
+        }));
+        console.log(`📊 已发送 ${oddsSnapshots.length} 个历史赔率变化点`);
+      }
+
+      // 2. 发送当前实时赔率
+      const currentOdds = await EventKlineService.getCurrentOdds(eventIdNum);
+      if (currentOdds && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          type: 'current',
+          data: currentOdds,
+        }));
+      }
+    } catch (error: any) {
+      console.error('发送初始数据失败:', error);
+    }
 
     // 处理客户端消息
     socket.on('message', (message: any) => {

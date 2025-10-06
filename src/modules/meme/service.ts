@@ -335,8 +335,11 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
     // 分配奖金给获胜者
     for (const bet of winningBets.rows) {
       const betAmount = parseFloat(bet.bet_amount);
-      const userShare = betAmount / winnerPool;
-      const payout = (userShare * totalPool).toFixed(2);
+      const oddsAtBet = parseFloat(bet.odds_at_bet);
+
+      // 赔付 = 本金 × (1 + 赔率/100)
+      // 例如: 下注100, 赔率50% → 赔付 = 100 × (1 + 50/100) = 150
+      const payout = (betAmount * (1 + oddsAtBet / 100)).toFixed(2);
 
       // 更新投注状态和实际奖金
       await client.query(
