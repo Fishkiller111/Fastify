@@ -18,6 +18,16 @@ npm run migrate        # Run all migrations in sequence
 node dist/scripts/init-sms-config.js  # Initialize SMS configuration
 ```
 
+### Initial Setup
+```bash
+cp .env.template .env  # Create environment file from template
+# Edit .env with your database credentials and JWT secret
+npm install            # Install dependencies (uses pnpm)
+npm run build          # Compile TypeScript
+npm run migrate        # Initialize database schema
+npm run dev            # Start development server
+```
+
 ## Architecture Overview
 
 This is a **Fastify-based REST API** with TypeScript, JWT authentication, and PostgreSQL database.
@@ -67,12 +77,14 @@ Each module follows this structure:
 #### Module Registration & Plugin Order
 1. **Server Setup**: `src/server.ts` is the entry point
 2. **Plugin Registration Order** (critical):
+   - WebSocket plugin (`@fastify/websocket`) - must be first for real-time features
    - CORS plugin
    - Swagger & Swagger UI plugins
    - JWT plugin (`src/plugins/jwt.ts`)
    - Auth plugin (`src/plugins/auth.ts`) - must come after JWT
    - All route modules via `src/routes/index.ts`
 3. **Route Prefixes**: All API routes mounted under `/api/*` (e.g., `/api/auth`, `/api/user`, `/api/admin/users`)
+4. **Startup Tasks**: Auto-settlement cron job starts automatically via `startAutoSettleJob()` in `src/server.ts`
 
 ### API Documentation
 - **Swagger UI**: Available at `/docs` when server is running
@@ -130,10 +142,13 @@ fastify.delete('/users/:id', {
 });
 ```
 
-### ES Modules
+### ES Modules & TypeScript Configuration
 - All imports must use `.js` extensions even for TypeScript files
 - TypeScript compiles to ES modules in `dist/` directory
 - Package.json has `"type": "module"` configuration
+- **Path Aliases**: `@/*` maps to `src/*` (configured in `tsconfig.json`)
+  - Note: Path aliases work during development but TypeScript doesn't transform them in output
+  - If using path aliases in production, consider using a bundler or path rewriting tool
 
 ### Database Migrations
 - Run in sequence using `npm run migrate`
