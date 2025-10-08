@@ -7,6 +7,7 @@ export interface BigCoin {
   chain: string;
   decimals: number;
   is_active: boolean;
+  icon_url?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -68,4 +69,5 @@ export interface AddBigCoinRequest {
   chain?: string;
   decimals?: number;
   is_active?: boolean;
+  icon_url?: string;
 }

@@ -597,6 +597,7 @@ class UserService {
           me.big_coin_id,
           bc.symbol as big_coin_symbol,
           bc.name as big_coin_name,
+          bc.icon_url as big_coin_icon_url,
           me.future_price,
           me.current_price
          FROM meme_bets mb
@@ -630,6 +631,7 @@ class UserService {
           big_coin_id: row.big_coin_id,
           big_coin_symbol: row.big_coin_symbol,
           big_coin_name: row.big_coin_name,
+          big_coin_icon_url: row.big_coin_icon_url,
           future_price: row.future_price,
           current_price: row.current_price,
         }

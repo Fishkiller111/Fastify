@@ -120,6 +120,7 @@ async function userRoutes(fastify: FastifyInstance) {
                   big_coin_id: { type: 'number', nullable: true },
                   big_coin_symbol: { type: 'string', nullable: true },
                   big_coin_name: { type: 'string', nullable: true },
+                  big_coin_icon_url: { type: 'string', nullable: true },
                   future_price: { type: 'string', nullable: true },
                   current_price: { type: 'string', nullable: true },
                 },

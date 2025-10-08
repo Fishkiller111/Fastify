@@ -101,6 +101,7 @@ export interface UserBetWithEvent extends MemeBet {
     big_coin_id?: number;
     big_coin_symbol?: string;
     big_coin_name?: string;
+    big_coin_icon_url?: string;
     future_price?: string;
     current_price?: string;
   };

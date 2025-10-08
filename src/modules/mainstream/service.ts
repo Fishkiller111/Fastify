@@ -127,6 +127,7 @@ export async function addBigCoin(data: AddBigCoinRequest): Promise<BigCoin> {
     chain = 'BSC',
     decimals = 18,
     is_active = true,
+    icon_url,
   } = data;
 
   // 检查合约地址是否已存在
@@ -150,10 +151,10 @@ export async function addBigCoin(data: AddBigCoinRequest): Promise<BigCoin> {
   }
 
   const result = await pool.query(
-    `INSERT INTO big_coins (symbol, name, contract_address, chain, decimals, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO big_coins (symbol, name, contract_address, chain, decimals, is_active, icon_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [symbol, name, contract_address, chain, decimals, is_active]
+    [symbol, name, contract_address, chain, decimals, is_active, icon_url]
   );
 
   return result.rows[0];

@@ -28,6 +28,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
           chain: { type: 'string', default: 'BSC', description: '链名称' },
           decimals: { type: 'number', default: 18, description: '小数位数' },
           is_active: { type: 'boolean', default: true, description: '是否激活' },
+          icon_url: { type: 'string', description: '币种图标URL地址' },
         },
       },
       response: {
@@ -41,6 +42,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             chain: { type: 'string' },
             decimals: { type: 'number' },
             is_active: { type: 'boolean' },
+            icon_url: { type: 'string', nullable: true },
             created_at: { type: 'string' },
             updated_at: { type: 'string' },
           },
@@ -85,6 +87,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
               chain: { type: 'string' },
               decimals: { type: 'number' },
               is_active: { type: 'boolean' },
+              icon_url: { type: 'string', nullable: true },
               created_at: { type: 'string' },
               updated_at: { type: 'string' },
             },
