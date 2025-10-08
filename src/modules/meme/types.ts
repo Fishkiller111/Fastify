@@ -86,3 +86,33 @@ export interface GetUserBetsQuery {
   limit?: number;
   offset?: number;
 }
+
+// 用户所有投注记录(包含事件详情)
+export interface UserBetWithEvent extends MemeBet {
+  event: {
+    id: number;
+    type: string;
+    status: MemeEventStatus;
+    contract_address?: string;
+    deadline: Date;
+    settled_at?: Date;
+    token_name?: string;
+    // Mainstream特有字段
+    big_coin_id?: number;
+    big_coin_symbol?: string;
+    big_coin_name?: string;
+    future_price?: string;
+    current_price?: string;
+  };
+}
+
+// 用户统计数据
+export interface UserStatistics {
+  total_bets: number;           // 总下注次数
+  total_bet_amount: string;     // 总下注金额
+  active_bet_amount: string;    // 活跃下注金额(pending状态)
+  profit: string;               // 盈利(won状态的收益)
+  loss: string;                 // 亏损(lost状态的损失)
+  net_profit: string;           // 净盈利(profit - loss)
+  win_rate: string;             // 胜率百分比
+}

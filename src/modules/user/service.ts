@@ -574,6 +574,146 @@ class UserService {
   }
 
   /**
+   * 获取用户所有下注记录(包含事件详情)
+   * 包括 meme 和 mainstream 类型的所有下注
+   * @param userId 用户ID
+   * @param limit 返回记录数
+   * @param offset 分页偏移量
+   * @returns 用户下注记录列表
+   */
+  async getAllUserBets(userId: number, limit: number = 50, offset: number = 0): Promise<any[]> {
+    const client = await pool.connect();
+
+    try {
+      const result = await client.query(
+        `SELECT
+          mb.*,
+          me.type,
+          me.status as event_status,
+          me.contract_address,
+          me.deadline,
+          me.settled_at,
+          me.token_name,
+          me.big_coin_id,
+          bc.symbol as big_coin_symbol,
+          bc.name as big_coin_name,
+          me.future_price,
+          me.current_price
+         FROM meme_bets mb
+         INNER JOIN meme_events me ON mb.event_id = me.id
+         LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
+         WHERE mb.user_id = $1
+         ORDER BY mb.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+
+      return result.rows.map(row => ({
+        id: row.id,
+        event_id: row.event_id,
+        user_id: row.user_id,
+        bet_type: row.bet_type,
+        bet_amount: row.bet_amount,
+        odds_at_bet: row.odds_at_bet,
+        potential_payout: row.potential_payout,
+        actual_payout: row.actual_payout,
+        status: row.status,
+        created_at: row.created_at,
+        event: {
+          id: row.event_id,
+          type: row.type,
+          status: row.event_status,
+          contract_address: row.contract_address,
+          deadline: row.deadline,
+          settled_at: row.settled_at,
+          token_name: row.token_name,
+          big_coin_id: row.big_coin_id,
+          big_coin_symbol: row.big_coin_symbol,
+          big_coin_name: row.big_coin_name,
+          future_price: row.future_price,
+          current_price: row.current_price,
+        }
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取用户统计数据
+   * 包括: 盈利、亏损、活跃下注金额等
+   * @param userId 用户ID
+   * @param timeRange 时间范围 ('1d' | '1w' | '1m' | 'all')
+   * @returns 用户统计数据
+   */
+  async getUserStatistics(userId: number, timeRange: string = 'all'): Promise<any> {
+    const client = await pool.connect();
+
+    try {
+      // 构建时间过滤条件
+      let timeFilter = '';
+      const params: any[] = [userId];
+
+      if (timeRange !== 'all') {
+        let interval = '';
+        switch (timeRange) {
+          case '1d':
+            interval = '1 day';
+            break;
+          case '1w':
+            interval = '7 days';
+            break;
+          case '1m':
+            interval = '30 days';
+            break;
+          default:
+            interval = ''; // 默认为all,不添加时间限制
+        }
+
+        if (interval) {
+          timeFilter = `AND created_at >= NOW() - INTERVAL '${interval}'`;
+        }
+      }
+
+      const result = await client.query(
+        `SELECT
+          COUNT(*) as total_bets,
+          COALESCE(SUM(bet_amount), 0) as total_bet_amount,
+          COALESCE(SUM(CASE WHEN status = 'pending' THEN bet_amount ELSE 0 END), 0) as active_bet_amount,
+          COALESCE(SUM(CASE WHEN status = 'won' THEN (actual_payout - bet_amount) ELSE 0 END), 0) as profit,
+          COALESCE(SUM(CASE WHEN status = 'lost' THEN bet_amount ELSE 0 END), 0) as loss,
+          COUNT(CASE WHEN status = 'won' THEN 1 END) as won_count,
+          COUNT(CASE WHEN status IN ('won', 'lost') THEN 1 END) as settled_count
+         FROM meme_bets
+         WHERE user_id = $1 ${timeFilter}`,
+        params
+      );
+
+      const row = result.rows[0];
+
+      const profit = parseFloat(row.profit);
+      const loss = parseFloat(row.loss);
+      const netProfit = profit - loss;
+      const settledCount = parseInt(row.settled_count);
+      const wonCount = parseInt(row.won_count);
+      const winRate = settledCount > 0 ? ((wonCount / settledCount) * 100).toFixed(2) : '0.00';
+
+      return {
+        time_range: timeRange,
+        total_bets: parseInt(row.total_bets),
+        total_bet_amount: parseFloat(row.total_bet_amount).toFixed(2),
+        active_bet_amount: parseFloat(row.active_bet_amount).toFixed(2),
+        profit: profit.toFixed(2),
+        loss: loss.toFixed(2),
+        net_profit: netProfit.toFixed(2),
+        win_rate: winRate,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * 创建管理员用户
    * @param userData 管理员数据
    * @returns 创建的管理员用户信息
