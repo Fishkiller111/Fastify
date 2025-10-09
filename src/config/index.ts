@@ -1,9 +1,11 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import pool from './database.js';
 
 // 加载环境变量
+// 注意：不再导入pool，避免循环依赖
 dotenv.config();
+
+
 
 // 数据库配置接口
 interface DatabaseConfig {

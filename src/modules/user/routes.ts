@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import UserService from './service.js';
 import { JwtUser } from '../../plugins/jwt.js';
-import { UpdateUserRoleRequest } from '../auth/types.js';
+// import { UpdateUserRoleRequest } from '../auth/types.ts';
 
 // 用户信息已通过auth插件扩展到FastifyRequest中
 

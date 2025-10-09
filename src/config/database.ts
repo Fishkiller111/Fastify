@@ -1,13 +1,16 @@
 import { Pool, PoolConfig } from 'pg';
-import config from '../config/index.js';
+import dotenv from 'dotenv';
 
-// PostgreSQL连接配置
+// 直接加载环境变量，避免导入整个config
+dotenv.config();
+
+// 直接从环境变量获取数据库配置
 const poolConfig: PoolConfig = {
-  host: config.database.host,
-  port: config.database.port,
-  database: config.database.database,
-  user: config.database.user,
-  password: config.database.password,
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  database: process.env.DB_NAME || 'fastify_app',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
   max: 20, // 最大连接数
   idleTimeoutMillis: 30000, // 连接空闲超时时间
   connectionTimeoutMillis: 2000, // 连接超时时间

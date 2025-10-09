@@ -1,5 +1,5 @@
-import { Client, Pool } from 'pg';
-import config from '../config/index.js';
+import { Client, Pool } from "pg";
+import config from "../config/index.js";
 
 function createPool() {
   return new Pool({
@@ -15,21 +15,21 @@ async function ensureDatabaseExists() {
   const adminClient = new Client({
     host: config.database.host,
     port: config.database.port,
-    database: 'postgres',
+    database: "postgres",
     user: config.database.user,
     password: config.database.password,
   });
 
   try {
     await adminClient.connect();
-    const dbName = config.database.database.replace(/[^a-zA-Z0-9_]/g, '_');
+    const dbName = config.database.database.replace(/[^a-zA-Z0-9_]/g, "_");
     await adminClient.query(`CREATE DATABASE "${dbName}"`);
     console.log(`✅ 数据库 ${dbName} 创建成功`);
   } catch (error: any) {
-    if (error.code === '42P04') {
+    if (error.code === "42P04") {
       console.log(`ℹ️ 数据库 ${config.database.database} 已存在`);
     } else {
-      console.error('❌ 创建数据库时出错:', error);
+      console.error("❌ 创建数据库时出错:", error);
       throw error;
     }
   } finally {
@@ -38,14 +38,14 @@ async function ensureDatabaseExists() {
 }
 
 async function up() {
-  console.log('🚀 开始数据库初始化...');
+  console.log("🚀 开始数据库初始化...");
   await ensureDatabaseExists();
 
   const pool = createPool();
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     await client.query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -57,7 +57,7 @@ async function up() {
       $$ language 'plpgsql';
     `);
 
-    await client.query('DROP TABLE IF EXISTS admins');
+    await client.query("DROP TABLE IF EXISTS admins");
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -121,6 +121,11 @@ async function up() {
         ('password_min_length', '6', '密码最小长度'),
         ('email_verification_required', 'false', '是否需要邮箱验证'),
         ('phone_verification_required', 'false', '是否需要手机号验证')
+        ('membership_system_enabled', 'true', '是否启用会员系统'),
+        ('points_system_enabled', 'true', '是否启用积分系统'),
+        ('points_expiry_days', '365', '积分有效期（天）'),
+        ('default_points_per_action', '10', '默认每次操作获取的积分'),
+        ('max_daily_points', '100', '每日最多获取积分上限')
       ON CONFLICT (key) DO NOTHING;
     `);
     await client.query(`
@@ -131,11 +136,11 @@ async function up() {
       WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'super_admin');
     `);
 
-    await client.query('COMMIT');
-    console.log('🎉 数据库初始化完成');
+    await client.query("COMMIT");
+    console.log("🎉 数据库初始化完成");
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ 数据库初始化失败:', error);
+    await client.query("ROLLBACK");
+    console.error("❌ 数据库初始化失败:", error);
     throw error;
   } finally {
     client.release();
@@ -144,23 +149,23 @@ async function up() {
 }
 
 async function down() {
-  console.log('🔄 开始数据库回滚...');
+  console.log("🔄 开始数据库回滚...");
 
   const pool = createPool();
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
-    await client.query('DROP TABLE IF EXISTS config');
-    await client.query('DROP TABLE IF EXISTS users');
-    await client.query('DROP FUNCTION IF EXISTS update_updated_at_column()');
+    await client.query("DROP TABLE IF EXISTS config");
+    await client.query("DROP TABLE IF EXISTS users");
+    await client.query("DROP FUNCTION IF EXISTS update_updated_at_column()");
 
-    await client.query('COMMIT');
-    console.log('🎉 数据库回滚完成');
+    await client.query("COMMIT");
+    console.log("🎉 数据库回滚完成");
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ 数据库回滚失败:', error);
+    await client.query("ROLLBACK");
+    console.error("❌ 数据库回滚失败:", error);
     throw error;
   } finally {
     client.release();

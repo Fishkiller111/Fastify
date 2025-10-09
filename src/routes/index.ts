@@ -3,7 +3,7 @@ import authRoutes from '../modules/auth/routes.js';
 import userRoutes from '../modules/user/routes.js';
 import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
-
+import paymentRoutes from '../modules/payment/routes.js';
 /**
  * 注册所有路由
  * @param fastify Fastify实例
@@ -20,6 +20,8 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册验证码路由
   fastify.register(verificationRoutes, { prefix: '/api/verification' });
-}
 
+  // 注册支付路由
+  fastify.register(paymentRoutes, { prefix: '/api/payment' });
+}
 export default registerRoutes;
