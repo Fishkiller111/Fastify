@@ -110,14 +110,15 @@ Each module follows this structure:
   - States: pending_match → active → settled
   - See MEME_FLOW.md for detailed business logic
 - **Big Coins** (`big_coins`): Supported major cryptocurrencies for mainstream events
-  - Fields: symbol, name, contract_address, chain (BSC), decimals, is_active
+  - Fields: symbol, name, contract_address, chain (BSC), decimals, is_active, icon_url
   - Used by mainstream events to reference supported coins
+  - icon_url: Optional URL field for cryptocurrency icon images (max 500 chars)
 - **Meme Bets** (`meme_bets`): User betting records with potential and actual payouts
   - Unified table for both meme and mainstream event bets
 - **Event Klines** (`klines`): Historical odds snapshots for K-line chart visualization
   - Timestamp-based records with yes_odds, no_odds, pools, total_bets
 - **Migrations**: Version-controlled schema changes with sequential numbering
-  - Latest: 006-add-future-price.ts (adds future_price, current_price for mainstream)
+  - Latest: 007-add-coin-icon.ts (adds icon_url to big_coins table)
 
 ## Important Implementation Notes
 
@@ -296,6 +297,80 @@ wsManager.broadcast(eventId).catch(err => {
 ```
 
 **Why**: Recording K-lines inside transactions can cause deadlocks when multiple bets happen simultaneously. Always commit first, then record K-lines.
+
+## User Statistics & Betting History
+
+### User Bet Records Endpoint
+**GET /api/user/bets/all** - Retrieves all user betting records across all event types (pumpfun, bonk, Mainstream)
+
+**Features**:
+- Unified query across both meme and mainstream events
+- Includes full event details in response
+- Supports pagination with `limit` and `offset` parameters
+- Returns big_coin information for mainstream events (symbol, name, icon_url)
+- Requires JWT authentication via `userAuth()` middleware
+
+**Response Structure**:
+```typescript
+{
+  id: number;
+  event_id: number;
+  bet_type: 'yes' | 'no';
+  bet_amount: string;
+  odds_at_bet: string;
+  potential_payout: string | null;
+  actual_payout: string | null;
+  status: 'pending' | 'won' | 'lost' | 'refunded';
+  created_at: string;
+  event: {
+    type: 'pumpfun' | 'bonk' | 'Mainstream';
+    status: string;
+    // Mainstream-specific fields
+    big_coin_symbol?: string;
+    big_coin_name?: string;
+    big_coin_icon_url?: string;
+    future_price?: string;
+    current_price?: string;
+  }
+}
+```
+
+### User Statistics Endpoint
+**GET /api/user/statistics** - Provides comprehensive user betting statistics with time range filtering
+
+**Query Parameters**:
+- `time_range`: Optional filter for time period
+  - `1d` - Last 24 hours
+  - `1w` - Last 7 days
+  - `1m` - Last 30 days (default)
+  - `all` - All time
+
+**Calculated Metrics**:
+- **total_bets**: Total number of bets placed
+- **total_bet_amount**: Sum of all bet amounts
+- **active_bet_amount**: Sum of bets with `status = 'pending'` (excludes settled/cancelled)
+- **profit**: Sum of (actual_payout - bet_amount) for won bets
+- **loss**: Sum of bet_amount for lost bets
+- **net_profit**: profit - loss
+- **win_rate**: Percentage of won bets among settled bets
+
+**Implementation Details**:
+- Uses PostgreSQL INTERVAL syntax for time filtering
+- COALESCE for null safety in aggregate calculations
+- Only pending bets count towards active_bet_amount
+- Time filtering based on `created_at` field
+- Response includes `time_range` field showing queried period
+
+**SQL Pattern**:
+```sql
+SELECT
+  COUNT(*) as total_bets,
+  COALESCE(SUM(CASE WHEN status = 'pending' THEN bet_amount ELSE 0 END), 0) as active_bet_amount,
+  COALESCE(SUM(CASE WHEN status = 'won' THEN (actual_payout - bet_amount) ELSE 0 END), 0) as profit
+FROM meme_bets
+WHERE user_id = $1
+  AND created_at >= NOW() - INTERVAL '7 days'  -- for time_range='1w'
+```
 
 ## Template Package Architecture
 
