@@ -91,6 +91,67 @@ async function up() {
     `);
 
     await client.query(`
+    -- 会员等级表
+      drop table if exists membership_levels;
+      create table if not exists membership_levels (
+        id serial primary key,
+        name varchar(50) not null unique, -- 等级名称
+        level integer not null unique, -- 等级数字，用于排序
+        min_points integer not null, -- 升级到该等级所需的最小积分
+        description text, -- 等级描述
+        权益 jsonb, -- 等级权益，以JSON格式存储
+        created_at timestamp with time zone default current_timestamp,
+        updated_at timestamp with time zone default current_timestamp
+      );
+    `);
+
+    await client.query(`
+      drop trigger if exists update_membership_levels_updated_at on membership_levels;
+      create trigger update_membership_levels_updated_at
+      before update on membership_levels
+      for each row
+      execute function update_updated_at_column();
+    `);
+
+    await client.query(`
+      -- 用户会员信息表
+      drop table if exists user_membership;
+      create table if not exists user_membership (
+        id serial primary key,
+        user_id integer not null references users(id) on delete cascade,
+        level_id integer references membership_levels(id) on delete set null,
+        current_points integer default 0, -- 当前积分
+        total_points integer default 0, -- 累计积分
+        points_expire_date timestamp with time zone, -- 积分过期日期
+        created_at timestamp with time zone default current_timestamp,
+        updated_at timestamp with time zone default current_timestamp,
+        unique (user_id)
+      );
+    `);
+
+    await client.query(`
+      drop trigger if exists update_user_membership_updated_at on user_membership;
+      create trigger update_user_membership_updated_at
+      before update on user_membership
+      for each row
+      execute function update_updated_at_column();
+    `);
+
+    await client.query(`
+      -- 积分变动记录表
+      drop table if exists point_transactions;
+      create table if not exists point_transactions (
+        id serial primary key,
+        user_id integer not null references users(id) on delete cascade,
+        points integer not null, -- 积分变动数量（正数为增加，负数为减少）
+        type varchar(50) not null, -- 交易类型（如：购买、签到、兑换等）
+        source varchar(100), -- 交易来源（如：订单号、活动ID等）
+        description text, -- 交易描述
+        created_at timestamp with time zone default current_timestamp
+      );
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS config (
         id SERIAL PRIMARY KEY,
         key VARCHAR(100) UNIQUE NOT NULL,
