@@ -143,6 +143,17 @@ fastify.delete('/users/:id', {
 });
 ```
 
+### Role-Based Access Control (RBAC)
+The system supports two admin role levels:
+- **`user`**: Regular users with basic authentication
+- **`admin`**: Administrators requiring specific permissions (e.g., `meme.delete`, `mainstream.delete`)
+- **`super_admin`**: Super administrators with highest privileges, bypasses all permission checks
+
+**Permission Logic**:
+- `super_admin` has unrestricted access to all admin routes
+- `admin` requires specific permissions defined in the `permissions` array
+- Permission check happens in `src/plugins/auth.ts` adminAuth middleware
+
 ### ES Modules & TypeScript Configuration
 - All imports must use `.js` extensions even for TypeScript files
 - TypeScript compiles to ES modules in `dist/` directory
@@ -230,10 +241,16 @@ NO_odds = (YES_pool / total_pool) × 100
 ```
 
 #### Real-time Updates via WebSocket
-- **Connection**: `ws://host/ws/kline/events/{eventId}`
+- **Connection**: `ws://host/ws/kline/events/{eventId}?interval=1m&source=pumpfun`
 - **Manager**: `src/modules/kline/websocket.ts` - WebSocketManager class
-- **Broadcasting**: Automatic odds updates after each bet
-- **Message Format**: `{ type: 'odds_update', data: { yes_odds, no_odds, timestamp } }`
+- **Broadcasting**: Automatic odds updates and bet records after each bet
+- **Message Types**:
+  - `historical`: Initial historical odds data for chart rendering
+  - `current`: Current real-time odds snapshot
+  - `bet_placed`: Real-time user bet records broadcast
+  - `odds_update`: Updated odds after betting activity
+  - `pong`: Heartbeat response
+- **Test Page**: `test-kline.html` provides complete WebSocket testing interface
 
 #### Settlement & Payout
 - **Trigger**: Auto-settlement via cron job (every minute) or manual admin trigger
@@ -407,3 +424,62 @@ When modifying the template for republishing:
 5. Publish with `npm publish` (runs `prepublishOnly` hook automatically)
 
 **Important**: Files listed in `package.json` `files` array are included in the npm package. The `bin/create-fastify-app.js` generator copies everything except items in `template.json` excludes list.
+
+## WebSocket Real-Time Features
+
+### WebSocket Bet Broadcasting
+When users place bets, the system broadcasts two types of messages:
+1. **`bet_placed`**: Real-time bet record with user_id, bet_type, bet_amount, odds_at_bet, potential_payout, timestamp
+2. **`odds_update`**: Updated odds after the bet is processed
+
+**Implementation Location**: `src/modules/kline/websocket.ts`
+
+**Broadcast Methods**:
+- `broadcastBet(eventId, betData)`: Sends bet records to all subscribed clients
+- `broadcast(eventId)`: Sends odds updates to all subscribed clients
+
+**Frontend Integration**:
+```javascript
+const ws = new WebSocket('ws://localhost:7000/ws/kline/events/1?interval=1m&source=pumpfun');
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+
+  switch(message.type) {
+    case 'bet_placed':
+      // Handle new bet record
+      // Display in bet list, update statistics
+      break;
+    case 'odds_update':
+      // Update odds display and charts
+      break;
+  }
+};
+```
+
+**WebSocket Documentation Endpoint**: `GET /api/kline/websocket-docs` returns complete WebSocket API documentation with examples
+
+## Administrative Operations
+
+### Delete Settled Events
+Two endpoints for cleaning up settled prediction market events:
+
+**Meme Events**: `DELETE /api/meme/events/settled`
+- Deletes all settled meme events (pumpfun, bonk)
+- Cascades to meme_bets and klines tables
+- Requires `super_admin` role or `admin` with `meme.delete` permission
+
+**Mainstream Events**: `DELETE /api/mainstream/events/settled`
+- Deletes all settled mainstream coin events
+- Cascades to meme_bets and klines tables
+- Requires `super_admin` role or `admin` with `mainstream.delete` permission
+
+**Response Format**:
+```json
+{
+  "deletedCount": 5,
+  "message": "成功删除 5 个已结算的Meme事件及其关联数据"
+}
+```
+
+**Implementation**: Uses database transactions to ensure data integrity during cascade deletion
