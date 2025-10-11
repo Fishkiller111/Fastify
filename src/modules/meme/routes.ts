@@ -112,6 +112,16 @@ async function memeRoutes(fastify: FastifyInstance) {
       // 保存K线数据到数据库
       await EventKlineService.recordOddsSnapshot(body.event_id);
 
+      // 广播下注记录到WebSocket订阅者
+      await wsManager.broadcastBet(body.event_id, {
+        userId: bet.user_id,
+        betType: bet.bet_type,
+        betAmount: bet.bet_amount,
+        oddsAtBet: bet.odds_at_bet,
+        potentialPayout: bet.potential_payout || '0',
+        createdAt: bet.created_at.toISOString(),
+      });
+
       // 广播赔率更新到WebSocket订阅者
       await wsManager.broadcast(body.event_id);
 
@@ -320,6 +330,32 @@ async function memeRoutes(fastify: FastifyInstance) {
         user_id: userId,
       });
       reply.send(bets);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 删除所有已结算的Meme事件（管理员操作）
+  fastify.delete('/events/settled', {
+    schema: {
+      description: '一键删除所有已结算的Meme事件及其关联数据（投注记录、K线数据）。需要 super_admin 角色或拥有 meme.delete 权限的 admin 角色',
+      tags: ['Meme合约'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            deletedCount: { type: 'number', description: '删除的事件数量' },
+            message: { type: 'string', description: '操作结果消息' },
+          },
+        },
+      },
+    },
+    preHandler: fastify.adminAuth(['meme.delete']),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const result = await MemeService.deleteSettledEvents();
+      reply.send(result);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

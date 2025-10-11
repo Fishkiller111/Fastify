@@ -498,6 +498,64 @@ export async function getUserBets(query: GetUserBetsQuery): Promise<MemeBet[]> {
   return result.rows;
 }
 
+/**
+ * 删除已结算的Meme事件及其关联数据
+ * 级联删除: meme_bets, klines
+ */
+export async function deleteSettledEvents(): Promise<{ deletedCount: number; message: string }> {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. 查询所有已结算的事件ID
+    const settledEventsResult = await client.query(
+      `SELECT id FROM meme_events WHERE status = 'settled' AND type IN ('pumpfun', 'bonk')`
+    );
+
+    const eventIds = settledEventsResult.rows.map(row => row.id);
+
+    if (eventIds.length === 0) {
+      await client.query('COMMIT');
+      return {
+        deletedCount: 0,
+        message: '没有找到已结算的Meme事件'
+      };
+    }
+
+    // 2. 删除相关的投注记录
+    await client.query(
+      `DELETE FROM meme_bets WHERE event_id = ANY($1)`,
+      [eventIds]
+    );
+
+    // 3. 删除相关的K线数据
+    await client.query(
+      `DELETE FROM klines WHERE event_id = ANY($1)`,
+      [eventIds]
+    );
+
+    // 4. 删除事件记录
+    await client.query(
+      `DELETE FROM meme_events WHERE id = ANY($1)`,
+      [eventIds]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      deletedCount: eventIds.length,
+      message: `成功删除 ${eventIds.length} 个已结算的Meme事件及其关联数据`
+    };
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('删除已结算Meme事件失败:', error);
+    throw new Error('删除已结算事件失败: ' + error.message);
+  } finally {
+    client.release();
+  }
+}
+
 export default {
   createMemeEvent,
   placeBet,
@@ -505,4 +563,5 @@ export default {
   getEvents,
   getEventById,
   getUserBets,
+  deleteSettledEvents,
 };

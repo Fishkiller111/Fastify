@@ -182,36 +182,114 @@ async function klineRoutes(fastify: FastifyInstance) {
       endpoint: 'ws://localhost:3000/ws/kline/events/:eventId',
       description: 'WebSocket实时K线数据推送接口',
       protocol: 'WebSocket',
-      connection_example: 'ws://localhost:3000/ws/kline/events/1',
-      message_format: {
-        type: 'odds_update',
-        data: {
-          event_id: 1,
-          yes_odds: 55.50,
-          no_odds: 44.50,
-          yes_pool: 1000.00,
-          no_pool: 800.00,
-          timestamp: Date.now(),
+      connection_example: 'ws://localhost:3000/ws/kline/events/1?interval=1m&source=pumpfun',
+      message_types: {
+        historical: {
+          description: '连接建立时推送历史赔率变化点',
+          example: {
+            type: 'historical',
+            data: [
+              {
+                event_id: 1,
+                yes_odds: 55.50,
+                no_odds: 44.50,
+                yes_pool: 1000.00,
+                no_pool: 800.00,
+                timestamp: 1699999999999,
+                source: 'pumpfun'
+              }
+            ]
+          }
         },
+        current: {
+          description: '连接建立时推送当前实时赔率',
+          example: {
+            type: 'current',
+            data: {
+              event_id: 1,
+              yes_odds: 55.50,
+              no_odds: 44.50,
+              yes_pool: 1000.00,
+              no_pool: 800.00,
+              timestamp: 1699999999999,
+              source: 'pumpfun'
+            }
+          }
+        },
+        odds_update: {
+          description: '下注后自动推送赔率更新',
+          example: {
+            type: 'odds_update',
+            data: {
+              event_id: 1,
+              yes_odds: 56.20,
+              no_odds: 43.80,
+              yes_pool: 1100.00,
+              no_pool: 850.00,
+              timestamp: 1700000000000,
+              source: 'pumpfun'
+            }
+          }
+        },
+        bet_placed: {
+          description: '用户下注时推送下注记录',
+          example: {
+            type: 'bet_placed',
+            data: {
+              user_id: 123,
+              bet_type: 'yes',
+              bet_amount: '100.00',
+              odds_at_bet: '1.85',
+              potential_payout: '185.00',
+              timestamp: '2025-10-11T08:30:45.123Z'
+            }
+          }
+        }
       },
       features: [
-        '连接建立时自动推送当前赔率',
-        '下注发生时自动广播赔率更新',
+        '连接建立时推送历史赔率变化点（折线图数据）',
+        '连接建立时推送当前实时赔率',
+        '用户下注时实时推送下注记录',
+        '下注后自动广播赔率更新',
         '支持多客户端同时订阅',
         '断线自动清理资源',
+        '支持 ping/pong 心跳保持连接'
       ],
       javascript_example: `
-const ws = new WebSocket('ws://localhost:3000/ws/kline/events/1');
+const ws = new WebSocket('ws://localhost:3000/ws/kline/events/1?interval=1m&source=pumpfun');
 
 ws.onopen = () => {
   console.log('WebSocket已连接');
+
+  // 发送心跳
+  setInterval(() => {
+    ws.send(JSON.stringify({ type: 'ping' }));
+  }, 30000);
 };
 
 ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
-  if (message.type === 'odds_update') {
-    console.log('赔率更新:', message.data);
-    // 更新UI显示
+
+  switch(message.type) {
+    case 'historical':
+      console.log('历史数据:', message.data);
+      // 绘制折线图
+      break;
+    case 'current':
+      console.log('当前赔率:', message.data);
+      // 更新当前赔率显示
+      break;
+    case 'odds_update':
+      console.log('赔率更新:', message.data);
+      // 更新赔率UI和折线图
+      break;
+    case 'bet_placed':
+      console.log('下注记录:', message.data);
+      // 在下注列表中添加新记录
+      break;
+    case 'pong':
+      console.log('心跳响应');
+      break;
   }
 };
 

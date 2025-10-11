@@ -165,9 +165,9 @@ function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
         });
       }
 
-      // 检查是否为管理员
-      if (user.role !== 'admin') {
-        console.error('User is not an admin');
+      // 检查是否为管理员或超级管理员
+      if (user.role !== 'admin' && user.role !== 'super_admin') {
+        console.error('User is not an admin or super_admin');
         return reply.code(403).send({
           statusCode: 403,
           error: 'Forbidden',
@@ -175,19 +175,24 @@ function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
         });
       }
 
-      // 检查权限
-      if (requiredPermissions.length > 0) {
-        const hasPermission = requiredPermissions.some(permission =>
-          user.permissions.includes(permission)
-        );
+      // super_admin 拥有最高权限，跳过权限检查
+      if (user.role === 'super_admin') {
+        console.log('Super admin detected, bypassing permission checks');
+      } else {
+        // 普通 admin 需要检查具体权限
+        if (requiredPermissions.length > 0) {
+          const hasPermission = requiredPermissions.some(permission =>
+            user.permissions.includes(permission)
+          );
 
-        if (!hasPermission) {
-          console.error('Insufficient permissions. Required:', requiredPermissions, 'Has:', user.permissions);
-          return reply.code(403).send({
-            statusCode: 403,
-            error: 'Forbidden',
-            message: 'Insufficient permissions'
-          });
+          if (!hasPermission) {
+            console.error('Insufficient permissions. Required:', requiredPermissions, 'Has:', user.permissions);
+            return reply.code(403).send({
+              statusCode: 403,
+              error: 'Forbidden',
+              message: 'Insufficient permissions'
+            });
+          }
         }
       }
 

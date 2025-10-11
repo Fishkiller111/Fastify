@@ -366,12 +366,50 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       const body = request.body as PlaceBetRequest;
       const bet = await MainstreamService.placeMainstreamBet(userId, body);
 
+      // 广播下注记录到WebSocket订阅者（非阻塞）
+      wsManager.broadcastBet(body.event_id, {
+        userId: bet.user_id,
+        betType: bet.bet_type,
+        betAmount: bet.bet_amount,
+        oddsAtBet: bet.odds_at_bet,
+        potentialPayout: bet.potential_payout || '0',
+        createdAt: bet.created_at.toISOString(),
+      }).catch(err => {
+        console.error('WebSocket下注广播失败:', err);
+      });
+
       // 广播赔率更新到WebSocket订阅者（非阻塞）
       wsManager.broadcast(body.event_id).catch(err => {
-        console.error('WebSocket广播失败:', err);
+        console.error('WebSocket赔率广播失败:', err);
       });
 
       reply.code(201).send(bet);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 删除所有已结算的主流币事件（管理员操作）
+  fastify.delete('/events/settled', {
+    schema: {
+      description: '一键删除所有已结算的主流币事件及其关联数据（投注记录、K线数据）。需要 super_admin 角色或拥有 mainstream.delete 权限的 admin 角色',
+      tags: ['主流币合约'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            deletedCount: { type: 'number', description: '删除的事件数量' },
+            message: { type: 'string', description: '操作结果消息' },
+          },
+        },
+      },
+    },
+    preHandler: fastify.adminAuth(['mainstream.delete']),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const result = await MainstreamService.deleteSettledMainstreamEvents();
+      reply.send(result);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

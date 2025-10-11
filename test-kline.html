@@ -93,10 +93,69 @@
             color: #888;
             font-size: 11px;
         }
+        .bets-container {
+            margin-top: 20px;
+        }
+        .bets-scroll {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .bet-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            border-left: 3px solid #007bff;
+            background: white;
+            border-radius: 4px;
+            animation: slideIn 0.3s ease;
+        }
+        .bet-item.my-bet {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .bet-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .bet-type {
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .bet-type.yes {
+            background: #d4edda;
+            color: #155724;
+        }
+        .bet-type.no {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .bet-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            font-size: 13px;
+            color: #666;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>K线WebSocket实时测试</h1>
+    <h1>K线WebSocket实时测试 + 下注记录</h1>
     
     <div class="container">
         <h3>连接控制</h3>
@@ -129,12 +188,24 @@
     </div>
 
     <div class="container">
+        <h3>实时下注记录 🎯</h3>
+        <div class="bets-container">
+            <div id="betsList" class="bets-scroll">
+                <div style="text-align: center; color: #888; padding: 20px;">
+                    等待下注记录...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
         <h3>消息日志</h3>
         <div id="messages"></div>
     </div>
 
     <script>
         let ws = null;
+        let betRecords = [];
 
         function addMessage(text, isError = false) {
             const messagesDiv = document.getElementById('messages');
@@ -180,7 +251,7 @@
                 ws.close();
             }
 
-            const wsUrl = `ws://localhost:3000/ws/kline/events/${eventId}`;
+            const wsUrl = `ws://localhost:7000/ws/kline/events/${eventId}`;
             addMessage(`正在连接到: ${wsUrl}`);
 
             ws = new WebSocket(wsUrl);
@@ -193,11 +264,37 @@
             ws.onmessage = (event) => {
                 try {
                     const message = JSON.parse(event.data);
-                    addMessage(`📊 收到消息: ${JSON.stringify(message, null, 2)}`);
 
-                    if (message.type === 'odds_update' && message.data) {
-                        updateOddsDisplay(message.data);
-                        addMessage(`🔄 赔率已更新 - YES: ${message.data.yes_odds}, NO: ${message.data.no_odds}`);
+                    switch(message.type) {
+                        case 'historical':
+                            addMessage(`📊 收到历史数据: ${message.data.length} 条记录`);
+                            break;
+
+                        case 'current':
+                            addMessage(`💰 收到当前赔率`);
+                            if (message.data) {
+                                updateOddsDisplay(message.data);
+                            }
+                            break;
+
+                        case 'bet_placed':
+                            addMessage(`🎯 新下注: ${message.data.bet_type.toUpperCase()} - ${message.data.bet_amount}`);
+                            handleNewBet(message.data);
+                            break;
+
+                        case 'odds_update':
+                            addMessage(`🔄 赔率更新 - YES: ${message.data.yes_odds}, NO: ${message.data.no_odds}`);
+                            if (message.data) {
+                                updateOddsDisplay(message.data);
+                            }
+                            break;
+
+                        case 'pong':
+                            addMessage(`❤️ 心跳响应`);
+                            break;
+
+                        default:
+                            addMessage(`📨 未知消息类型: ${message.type}`);
                     }
                 } catch (e) {
                     addMessage(`⚠️ 解析消息失败: ${event.data}`, true);
@@ -223,6 +320,73 @@
                 addMessage('当前没有活动连接', true);
             }
         }
+
+        // 处理新下注记录
+        function handleNewBet(betData) {
+            // 添加到列表前面
+            betRecords.unshift(betData);
+
+            // 限制列表长度为50条
+            if (betRecords.length > 50) {
+                betRecords = betRecords.slice(0, 50);
+            }
+
+            // 渲染列表
+            renderBetsList();
+        }
+
+        // 渲染下注记录列表
+        function renderBetsList() {
+            const container = document.getElementById('betsList');
+
+            if (betRecords.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #888; padding: 20px;">
+                        等待下注记录...
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = betRecords.map(bet => `
+                <div class="bet-item">
+                    <div class="bet-header">
+                        <span class="bet-type ${bet.bet_type}">${bet.bet_type.toUpperCase()}</span>
+                        <span class="timestamp">${formatTime(bet.timestamp)}</span>
+                    </div>
+                    <div class="bet-details">
+                        <div><strong>用户:</strong> ${maskUserId(bet.user_id)}</div>
+                        <div><strong>金额:</strong> ${bet.bet_amount}</div>
+                        <div><strong>赔率:</strong> ${bet.odds_at_bet}</div>
+                        <div><strong>预计收益:</strong> ${bet.potential_payout}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 格式化时间
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // 脱敏显示用户ID
+        function maskUserId(userId) {
+            const idStr = String(userId);
+            if (idStr.length <= 4) return `用户${idStr}`;
+            return `用户***${idStr.slice(-4)}`;
+        }
+
+        // 心跳保持连接
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000);
 
         // 页面关闭时自动断开
         window.addEventListener('beforeunload', () => {

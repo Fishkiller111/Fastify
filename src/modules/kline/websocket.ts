@@ -67,6 +67,43 @@ class WebSocketManager {
     }
   }
 
+  // 广播用户下注记录
+  async broadcastBet(eventId: number, betData: {
+    userId: number;
+    betType: 'yes' | 'no';
+    betAmount: string;
+    oddsAtBet: string;
+    potentialPayout: string;
+    createdAt: string;
+  }) {
+    const connections = this.connections.get(eventId);
+    if (!connections || connections.size === 0) return;
+
+    try {
+      const message = JSON.stringify({
+        type: 'bet_placed',
+        data: {
+          user_id: betData.userId,
+          bet_type: betData.betType,
+          bet_amount: betData.betAmount,
+          odds_at_bet: betData.oddsAtBet,
+          potential_payout: betData.potentialPayout,
+          timestamp: betData.createdAt,
+        },
+      });
+
+      connections.forEach((conn) => {
+        if (conn.socket.readyState === WebSocket.OPEN) {
+          conn.socket.send(message);
+        }
+      });
+
+      console.log(`💰 向 ${connections.size} 个客户端推送事件 ${eventId} 的下注记录`);
+    } catch (error: any) {
+      console.error('广播下注记录失败:', error);
+    }
+  }
+
   // 获取事件订阅数
   getSubscriptionCount(eventId: number): number {
     return this.connections.get(eventId)?.size || 0;
