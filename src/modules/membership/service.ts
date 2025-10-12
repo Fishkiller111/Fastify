@@ -1,8 +1,6 @@
-import pool  from "../../config/database.js";
+import pool from "../../config/database.js";
 import { getConfigByKey } from "../config/service.js";
-import { getUserById } from "../user/service.js";
 import type { MembershipLevel, UserMembership } from "./types.js";
-import type { User } from "../user/types.js";
 
 // 创建会员等级
 export async function createMembershipLevel(
@@ -11,10 +9,10 @@ export async function createMembershipLevel(
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `INSERT INTO membership_levels (name, level, min_points, description, 权益)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO membership_levels (name, level, upgrade_fee, gift_points, description, extra)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [level.name, level.level, level.min_points, level.description, level.权益]
+      [level.name, level.level, level.upgrade_fee, level.gift_points, level.description, level.extra]
     );
     return result.rows[0];
   } finally {
@@ -41,14 +39,14 @@ export async function getUserMembership(
 ): Promise<UserMembership> {
   const client = await pool.connect();
   try {
-    // 检查会员系统是否启用
+    // 检查会员积分系统是否启用
     const membershipEnabledConfig = await getConfigByKey(
-      "membership_system_enabled"
+      "membership_points_system_enabled"
     );
     const membershipEnabled = membershipEnabledConfig?.value === "true";
 
     if (!membershipEnabled) {
-      throw new Error("会员系统未启用");
+      throw new Error("会员积分系统未启用");
     }
 
     let result = await client.query(
@@ -76,9 +74,9 @@ export async function getUserMembership(
 export async function updateUserMembershipLevel(userId: number): Promise<void> {
   const client = await pool.connect();
   try {
-    // 检查会员系统是否启用
+    // 检查会员积分系统是否启用
     const membershipEnabledConfig = await getConfigByKey(
-      "membership_system_enabled"
+      "membership_points_system_enabled"
     );
     const membershipEnabled = membershipEnabledConfig?.value === "true";
 
@@ -104,7 +102,7 @@ export async function updateUserMembershipLevel(userId: number): Promise<void> {
     // 获取适合用户积分的最高等级
     const levelResult = await client.query(
       `SELECT id FROM membership_levels 
-       WHERE min_points <= $1 
+       WHERE upgrade_fee <= $1 
        ORDER BY level DESC LIMIT 1`,
       [currentPoints]
     );

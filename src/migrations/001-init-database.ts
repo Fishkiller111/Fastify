@@ -68,7 +68,7 @@ async function up() {
     `);
 
     await client.query("DROP TABLE IF EXISTS admins");
-
+    // 用户信息表
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -77,6 +77,9 @@ async function up() {
         password VARCHAR(255) NOT NULL,
         phone_number VARCHAR(20) UNIQUE,
         role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'super_admin')),
+        balance INTEGER DEFAULT 0, -- 用户当前剩余的积分
+        membership_level INTEGER DEFAULT 1, -- 会员等级，默认为1（青铜）
+        expires_at TIMESTAMP WITH TIME ZONE, -- 会员到期时间
         permissions TEXT[] DEFAULT ARRAY['user_access'],
         status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
         last_login_at TIMESTAMP,
@@ -99,19 +102,23 @@ async function up() {
       CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
       CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
     `);
-
+    // 举例：
+    // ("青铜", 1, 0, 0, "注册即青铜", '{"discount":0.98}'),
+    // ("白银", 2, 10000, 500, "累计充值 ≥100 元", '{"discount":0.95}'),
+    // ("黄金", 3, 50000, 3000, "累计充值 ≥500 元", '{"discount":0.90,"free_shipping":true}');
     await client.query(`
     -- 会员等级表
       drop table if exists membership_levels;
-      create table if not exists membership_levels (
-        id serial primary key,
-        name varchar(50) not null unique, -- 等级名称
-        level integer not null unique, -- 等级数字，用于排序
-        min_points integer not null, -- 升级到该等级所需的最小积分
-        description text, -- 等级描述
-        权益 jsonb, -- 等级权益，以JSON格式存储
-        created_at timestamp with time zone default current_timestamp,
-        updated_at timestamp with time zone default current_timestamp
+        create table if not exists membership_levels (
+        id          serial primary key,
+        name        varchar(50) not null unique,      -- 等级名称  e.g. 青铜
+        level       integer     not null unique,      -- 排序序号  1,2,3…
+        upgrade_fee integer     not null,             -- 升级到本等级需累计充值金额（单位：分）
+        gift_points integer     not null,             -- 升级后立即赠送的积分
+        description text,                             -- 文字描述
+        extra       jsonb,                            -- 其它权益（JSON 扩展）
+        created_at  timestamptz default current_timestamp,
+        updated_at  timestamptz default current_timestamp
       );
     `);
 
@@ -182,7 +189,7 @@ async function up() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_config_key ON config(key);
     `);
-
+    // 配置表
     await client.query(`
       INSERT INTO config (key, value, description)
       VALUES
@@ -192,8 +199,7 @@ async function up() {
         ('password_min_length', '6', '密码最小长度'),
         ('email_verification_required', 'false', '是否需要邮箱验证'),
         ('phone_verification_required', 'false', '是否需要手机号验证'),
-        ('membership_system_enabled', 'true', '是否启用会员系统'),
-        ('points_system_enabled', 'true', '是否启用积分系统'),
+        ('membership_points_system_enabled', 'true', '是否启用会员积分制系统'),
         ('points_expiry_days', '365', '积分有效期（天）'),
         ('default_points_per_action', '10', '默认每次操作获取的积分'),
         ('max_daily_points', '100', '每日最多获取积分上限')

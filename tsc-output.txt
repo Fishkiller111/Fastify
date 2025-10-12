@@ -1,0 +1,6 @@
+error TS6059: File 'D:/main/Fastify/scripts/check-password.ts' is not under 'rootDir' 'D:/main/Fastify/src'. 'rootDir' is expected to contain all source files.
+  The file is in the program because:
+    Matched by include pattern '**/*.ts' in 'D:/main/Fastify/tsconfig.json'
+error TS6059: File 'D:/main/Fastify/scripts/query-users.ts' is not under 'rootDir' 'D:/main/Fastify/src'. 'rootDir' is expected to contain all source files.
+  The file is in the program because:
+    Matched by include pattern '**/*.ts' in 'D:/main/Fastify/tsconfig.json'

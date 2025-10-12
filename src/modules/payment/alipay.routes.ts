@@ -1,114 +1,179 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { alipayService } from "./alipay.service";
 
-// 定义请求参数类型
-interface CreatePaymentRequest {
-  Body: {
-    outTradeNo: string;
-    totalAmount: number;
-    subject: string;
-  };
-}
-
-interface QueryOrderRequest {
-  Params: {
-    outTradeNo: string;
-  };
-}
-
-async function alipayRoutes(fastify: FastifyInstance) {
-  // 创建支付请求
-  fastify.post<{ Body: CreatePaymentRequest["Body"] }>(
+export default async function alipayRoutes(fastify: FastifyInstance) {
+  /* 1. 创建支付请求 ---------------------------------------------------- */
+  fastify.post(
     "/api/alipay/create",
+    {
+      schema: {
+        description: "创建支付宝支付订单",
+        tags: ["支付宝支付"],
+        body: {
+          type: "object",
+          required: ["outTradeNo", "totalAmount", "subject"],
+          properties: {
+            outTradeNo: { type: "string", description: "商户订单号" },
+            totalAmount: { type: "number", description: "订单金额（元）" },
+            subject: { type: "string", description: "商品标题" },
+          },
+        },
+        response: {
+          200: {
+            description: "成功返回支付表单 HTML",
+            type: "string",
+          },
+          400: {
+            description: "参数不完整",
+            type: "object",
+            properties: {
+              message: { type: "string" },
+            },
+          },
+          500: {
+            description: "服务端错误",
+            type: "object",
+            properties: {
+              message: { type: "string" },
+            },
+          },
+        },
+      },
+    },
     async (
-      request: FastifyRequest<CreatePaymentRequest>,
+      request: FastifyRequest<{
+        Body: {
+          outTradeNo: string;
+          totalAmount: number;
+          subject: string;
+        };
+      }>,
       reply: FastifyReply
     ) => {
+      const { outTradeNo, totalAmount, subject } = request.body;
+      if (!outTradeNo || !totalAmount || !subject) {
+        return reply.code(400).send({ message: "参数不完整" });
+      }
       try {
-        const { outTradeNo, totalAmount, subject } = request.body;
-
-        if (!outTradeNo || !totalAmount || !subject) {
-          return reply.status(400).send({ message: "参数不完整" });
-        }
-
-        // 调用支付宝服务生成支付表单
-        const formHtml = await alipayService.sendRequestToAlipay(
+        const html = await alipayService.sendRequestToAlipay(
           outTradeNo,
           totalAmount,
           subject
         );
-
-        // 返回支付表单，前端可以直接渲染
-        reply.type("text/html").send(formHtml);
-      } catch (error) {
-        console.error("创建支付请求失败:", error);
-        reply.status(500).send({ message: "创建支付请求失败" });
+        return reply.type("text/html").send(html);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ message: "创建支付请求失败" });
       }
     }
   );
 
-  // 处理支付宝同步回调
+  /* 2. 同步回调（浏览器重定向） ---------------------------------------- */
   fastify.get(
-    "/api/alipay/toSuccess",
+    "/api/alipay/return",
+    {
+      schema: {
+        description: "支付宝同步回调（浏览器重定向）",
+        tags: ["支付宝支付"],
+        querystring: {
+          type: "object",
+          properties: {
+            trade_status: { type: "string", description: "交易状态" },
+            out_trade_no: { type: "string", description: "商户订单号" },
+          },
+        },
+        response: {
+          302: { description: "重定向到结果页" },
+        },
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        // 同步回调参数
-        const params = request.query as Record<string, string>;
-
-        if (params.trade_status === "TRADE_SUCCESS") {
-          // 支付成功，重定向到前端成功页面
-          return reply.redirect(
-            `/payment/success?outTradeNo=${params.out_trade_no}`
-          );
-        } else {
-          // 支付失败或签名验证失败
-          return reply.redirect("/payment/fail");
-        }
-      } catch (error) {
-        console.error("处理同步回调失败:", error);
-        reply.redirect("/payment/fail");
+      const params = request.query as Record<string, string>;
+      if (params.trade_status === "TRADE_SUCCESS") {
+        return reply.redirect(
+          `/payment/success?outTradeNo=${params.out_trade_no}`
+        );
       }
+      return reply.redirect("/payment/fail");
     }
   );
 
-  // 处理支付宝异步通知
+  /* 3. 异步通知（支付宝服务器 → 我方） ---------------------------------- */
   fastify.post(
-    "/api/alipay/toSuccess",
+    "/api/alipay/notify",
+    {
+      schema: {
+        description: "支付宝异步通知",
+        tags: ["支付宝支付"],
+        body: {
+          type: "object",
+          description: "支付宝 POST 过来的原始参数",
+        },
+        response: {
+          200: {
+            description: "我方处理结果",
+            type: "string",
+            enum: ["success", "fail"],
+          },
+        },
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        // 异步通知参数
-        const params = request.body as Record<string, any>;
-
-        // // 处理通知并返回结果 验证签名的函数有误 无法正常执行
-        // const result = await alipayService.handleNotify(params);
-        const result = "success";
-        reply.send(result);
-      } catch (error) {
-        console.error("处理异步通知失败:", error);
-        reply.send("fail");
+        // todo: 验签、业务更新……
+        // const result = await alipayService.handleNotify(request.body);
+        return reply.send("success");
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.send("fail");
       }
     }
   );
 
-  // 查询订单状态
-  fastify.get<{ Params: QueryOrderRequest["Params"] }>(
+  /* 4. 查询订单状态 ----------------------------------------------------- */
+  fastify.get(
     "/api/alipay/query/:outTradeNo",
-    async (request: FastifyRequest<QueryOrderRequest>, reply: FastifyReply) => {
+    {
+      schema: {
+        description: "查询支付宝订单状态",
+        tags: ["支付宝支付"],
+        params: {
+          type: "object",
+          required: ["outTradeNo"],
+          properties: {
+            outTradeNo: { type: "string", description: "商户订单号" },
+          },
+        },
+        response: {
+          200: { description: "查询结果", type: "object" },
+          400: {
+            description: "参数错误",
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+          500: {
+            description: "服务端错误",
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { outTradeNo: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { outTradeNo } = request.params;
+      if (!outTradeNo) {
+        return reply.code(400).send({ message: "订单编号不能为空" });
+      }
       try {
-        const { outTradeNo } = request.params;
-
-        if (!outTradeNo) {
-          return reply.status(400).send({ message: "订单编号不能为空" });
-        }
-
-        // 查询订单
         const result = await alipayService.queryOrder(outTradeNo);
-        reply.send(result);
-      } catch (error) {
-        console.error("查询订单失败:", error);
-        reply.status(500).send({ message: "查询订单失败" });
+        return reply.send(result);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ message: "查询订单失败" });
       }
     }
   );
 }
-export default alipayRoutes;

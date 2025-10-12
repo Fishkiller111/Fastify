@@ -1,106 +1,166 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { wxpayService } from "./wxpay.service";
 
-// 定义请求参数类型
-interface CreateWxPaymentRequest {
-  Body: {
-    outTradeNo: string;
-    totalAmount: number;
-    subject: string;
-    attach?: string;
-  };
-}
-
-interface QueryWxOrderRequest {
-  Params: {
-    outTradeNo: string;
-  };
-}
-
-async function wxpayRoutes(fastify: FastifyInstance) {
-  // 创建微信Native支付订单
-  fastify.post<{ Body: CreateWxPaymentRequest["Body"] }>(
+export default async function wxpayRoutes(fastify: FastifyInstance) {
+  /* 1. 创建微信 Native 支付订单 ---------------------------------------- */
+  fastify.post(
     "/api/wxpay/create",
+    {
+      schema: {
+        description: "创建微信 Native 支付订单（扫码支付）",
+        tags: ["微信支付"],
+        body: {
+          type: "object",
+          required: ["outTradeNo", "totalAmount", "subject"],
+          properties: {
+            outTradeNo: { type: "string", description: "商户订单号" },
+            totalAmount: { type: "number", description: "订单金额（元）" },
+            subject: { type: "string", description: "商品标题" },
+            attach: { type: "string", description: "附加数据（选填）" },
+          },
+        },
+        response: {
+          200: {
+            description: "成功返回二维码链接",
+            type: "object",
+            properties: {
+              code_url: { type: "string", description: "二维码内容" },
+              expire_time: { type: "string", description: "过期时间（ISO）" },
+              out_trade_no: { type: "string", description: "商户订单号" },
+            },
+          },
+          400: {
+            description: "参数不完整",
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+          500: {
+            description: "服务端错误",
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+        },
+      },
+    },
     async (
-      request: FastifyRequest<CreateWxPaymentRequest>,
+      request: FastifyRequest<{
+        Body: {
+          outTradeNo: string;
+          totalAmount: number;
+          subject: string;
+          attach?: string;
+        };
+      }>,
       reply: FastifyReply
     ) => {
+      const { outTradeNo, totalAmount, subject, attach } = request.body;
+      if (!outTradeNo || !totalAmount || !subject) {
+        return reply.code(400).send({ message: "参数不完整" });
+      }
       try {
-        const { outTradeNo, totalAmount, subject, attach } = request.body;
-
-        if (!outTradeNo || !totalAmount || !subject) {
-          return reply.status(400).send({ message: "参数不完整" });
-        }
-
-        // 调用微信支付服务生成二维码链接
         const result = await wxpayService.sendNativeOrderRequest(
           outTradeNo,
           totalAmount,
           subject,
           attach
         );
-
-        // 返回二维码链接和过期时间
-        reply.send({
+        return reply.send({
           code_url: result.code_url,
           expire_time: result.expire_time,
           out_trade_no: outTradeNo,
         });
-      } catch (error) {
-        console.error("创建微信支付订单失败:", error);
-        reply.status(500).send({ message: "创建微信支付订单失败" });
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ message: "创建微信支付订单失败" });
       }
     }
   );
 
-  // 处理微信支付异步通知
+  /* 2. 微信支付异步通知 ------------------------------------------------ */
   fastify.post(
     "/api/wxpay/notify",
+    {
+      schema: {
+        description: "微信支付异步通知（Native/JSAPI 通用）",
+        tags: ["微信支付"],
+        body: {
+          type: "object",
+          description: "微信 POST 的 XML/JSON 原始参数（已解析）",
+        },
+        response: {
+          200: {
+            description: "我方处理结果",
+            type: "object",
+            properties: {
+              code: { type: "string", enum: ["SUCCESS", "FAIL"] },
+              message: { type: "string" },
+            },
+          },
+        },
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        // 获取原始请求体（需要在raw模式下获取完整body）
-        const rawBody = JSON.stringify(request.body);
-        // 获取请求头
-        const headers = request.headers as Record<string, string>;
-
-        // 处理通知并返回结果
-        const result = await wxpayService.handleNotify(headers, rawBody);
-
-        // 根据处理结果返回对应响应
-        if (result === "SUCCESS") {
-          reply.send({ code: "SUCCESS", message: "成功" });
-        } else {
-          reply.status(400).send({ code: "FAIL", message: "失败" });
-        }
-      } catch (error) {
-        console.error("处理微信支付通知失败:", error);
-        reply.status(500).send({ code: "FAIL", message: "处理失败" });
+        // 如果微信发的是 XML，需在 onSend 前把 rawBody 留下来，这里简化用解析后的 body
+        const result = await wxpayService.handleNotify(
+          request.headers as Record<string, string>,
+          JSON.stringify(request.body)
+        );
+        return reply.send({
+          code: result === "SUCCESS" ? "SUCCESS" : "FAIL",
+          message: result === "SUCCESS" ? "成功" : "失败",
+        });
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ code: "FAIL", message: "处理失败" });
       }
     }
   );
 
-  // 查询微信支付订单状态
-  fastify.get<{ Params: QueryWxOrderRequest["Params"] }>(
+  /* 3. 查询微信支付订单状态 -------------------------------------------- */
+  fastify.get(
     "/api/wxpay/query/:outTradeNo",
+    {
+      schema: {
+        description: "查询微信支付订单状态",
+        tags: ["微信支付"],
+        params: {
+          type: "object",
+          required: ["outTradeNo"],
+          properties: {
+            outTradeNo: { type: "string", description: "商户订单号" },
+          },
+        },
+        response: {
+          200: { description: "查询结果", type: "object" },
+          400: {
+            description: "参数错误",
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+          500: {
+            description: "服务端错误",
+            type: "object",
+            properties: { message: { type: "string" } },
+          },
+        },
+      },
+    },
     async (
-      request: FastifyRequest<QueryWxOrderRequest>,
+      request: FastifyRequest<{ Params: { outTradeNo: string } }>,
       reply: FastifyReply
     ) => {
+      const { outTradeNo } = request.params;
+      if (!outTradeNo) {
+        return reply.code(400).send({ message: "订单编号不能为空" });
+      }
       try {
-        const { outTradeNo } = request.params;
-
-        if (!outTradeNo) {
-          return reply.status(400).send({ message: "订单编号不能为空" });
-        }
-
-        // 查询订单
         const result = await wxpayService.queryOrderByOutTradeNo(outTradeNo);
-        reply.send(result);
-      } catch (error) {
-        console.error("查询微信支付订单失败:", error);
-        reply.status(500).send({ message: "查询微信支付订单失败" });
+        return reply.send(result);
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.code(500).send({ message: "查询微信支付订单失败" });
       }
     }
   );
 }
-export default wxpayRoutes;

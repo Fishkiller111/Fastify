@@ -4,17 +4,17 @@
  */
 export const wxpayConfig = {
   // 基础配置
-  appId: "wxd678efh567hg6787", // 公众号/小程序/AppID（与商户号绑定）
-  merchantId: "1230000109", // 商户号（登录商户平台 → 账户中心 → 商户信息）
+  appId: "your-wechat-app-id", // 公众号/小程序/AppID（与商户号绑定）
+  merchantId: "your-merchant-id", // 商户号（登录商户平台 → 账户中心 → 商户信息）
   apiV3Key: "your-api-v3-key-32-characters", // APIv3密钥（32位，商户平台 → API安全）
 
   // 密钥与证书
   privateKey: `-----BEGIN PRIVATE KEY-----
-MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAMrNt5...（你的商户私钥PEM完整内容）
+your-private-key-here
 -----END PRIVATE KEY-----`, // 商户私钥（用于JWT签名）
-  wechatCertSerial: "3000000001", // 微信平台证书序列号（用于回调验签）
+  wechatCertSerial: "your-wechat-cert-serial", // 微信平台证书序列号（用于回调验签）
   wechatPublicKey: `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn...（你的微信平台公钥PEM完整内容）
+your-wechat-public-key-here
 -----END PUBLIC KEY-----`, // 微信平台公钥（用于回调验签）
 
   // 接口与回调地址
