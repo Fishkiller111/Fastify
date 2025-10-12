@@ -178,7 +178,7 @@ export class ReferralService {
 
     let volumeToNextTier: number | null = null;
     if (nextTier) {
-      volumeToNextTier = nextTier.min_volume - totalVolume;
+      volumeToNextTier = nextTier.volume - totalVolume;
     }
 
     return {
@@ -196,15 +196,13 @@ export class ReferralService {
   /**
    * 根据交易量获取对应等级
    */
-  static async getTierByVolume(volume: number): Promise<CommissionTier | null> {
+  static async getTierByVolume(totalVolume: number): Promise<CommissionTier | null> {
     const result = await pool.query<CommissionTier>(
       `SELECT * FROM commission_tiers
-       WHERE is_active = true
-         AND min_volume <= $1
-         AND (max_volume IS NULL OR max_volume > $1)
-       ORDER BY tier_order DESC
+       WHERE is_active = true AND volume <= $1
+       ORDER BY volume DESC
        LIMIT 1`,
-      [volume]
+      [totalVolume]
     );
 
     return result.rows[0] || null;
@@ -239,24 +237,19 @@ export class ReferralService {
    * 创建等级配置
    */
   static async createTier(data: CreateCommissionTierRequest): Promise<CommissionTier> {
-    const { tier_name, min_volume, max_volume, commission_rate, tier_order } = data;
+    const { tier_name, volume, commission_rate, tier_order } = data;
 
     // 验证佣金比例
     if (commission_rate < 0 || commission_rate > 1) {
       throw new Error('佣金比例必须在 0 到 1 之间');
     }
 
-    // 验证交易量范围
-    if (max_volume !== undefined && max_volume <= min_volume) {
-      throw new Error('最大交易量必须大于最小交易量');
-    }
-
     const result = await pool.query<CommissionTier>(
       `INSERT INTO commission_tiers
-        (tier_name, min_volume, max_volume, commission_rate, tier_order)
-       VALUES ($1, $2, $3, $4, $5)
+        (tier_name, volume, commission_rate, tier_order)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [tier_name, min_volume, max_volume || null, commission_rate, tier_order]
+      [tier_name, volume, commission_rate, tier_order]
     );
 
     return result.rows[0];
@@ -278,14 +271,9 @@ export class ReferralService {
       values.push(data.tier_name);
     }
 
-    if (data.min_volume !== undefined) {
-      updates.push(`min_volume = $${paramIndex++}`);
-      values.push(data.min_volume);
-    }
-
-    if (data.max_volume !== undefined) {
-      updates.push(`max_volume = $${paramIndex++}`);
-      values.push(data.max_volume);
+    if (data.volume !== undefined) {
+      updates.push(`volume = $${paramIndex++}`);
+      values.push(data.volume);
     }
 
     if (data.commission_rate !== undefined) {

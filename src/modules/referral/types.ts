@@ -17,8 +17,7 @@ export interface ReferralRelationship {
 export interface CommissionTier {
   id: number;
   tier_name: string;
-  min_volume: number;
-  max_volume: number | null;
+  volume: number;
   commission_rate: number;
   tier_order: number;
   is_active: boolean;
@@ -53,16 +52,14 @@ export interface ReferralStatistics {
 
 export interface CreateCommissionTierRequest {
   tier_name: string;
-  min_volume: number;
-  max_volume?: number;
+  volume: number;
   commission_rate: number;
   tier_order: number;
 }
 
 export interface UpdateCommissionTierRequest {
   tier_name?: string;
-  min_volume?: number;
-  max_volume?: number;
+  volume?: number;
   commission_rate?: number;
   tier_order?: number;
   is_active?: boolean;

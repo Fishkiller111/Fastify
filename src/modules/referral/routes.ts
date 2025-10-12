@@ -108,8 +108,7 @@ export default async function referralRoutes(fastify: FastifyInstance) {
                 id: { type: 'number' },
                 tier_name: { type: 'string' },
                 commission_rate: { type: 'number' },
-                min_volume: { type: 'number' },
-                max_volume: { type: 'number', nullable: true }
+                volume: { type: 'number' }
               }
             },
             next_tier: {
@@ -250,8 +249,7 @@ export default async function referralRoutes(fastify: FastifyInstance) {
                 properties: {
                   id: { type: 'number' },
                   tier_name: { type: 'string' },
-                  min_volume: { type: 'number' },
-                  max_volume: { type: 'number', nullable: true },
+                  volume: { type: 'number' },
                   commission_rate: { type: 'number' },
                   tier_order: { type: 'number' },
                   is_active: { type: 'boolean' }
@@ -280,11 +278,10 @@ export default async function referralRoutes(fastify: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['tier_name', 'min_volume', 'commission_rate', 'tier_order'],
+        required: ['tier_name', 'volume', 'commission_rate', 'tier_order'],
         properties: {
           tier_name: { type: 'string' },
-          min_volume: { type: 'number' },
-          max_volume: { type: 'number' },
+          volume: { type: 'number' },
           commission_rate: { type: 'number' },
           tier_order: { type: 'number' }
         }
@@ -324,8 +321,7 @@ export default async function referralRoutes(fastify: FastifyInstance) {
         type: 'object',
         properties: {
           tier_name: { type: 'string' },
-          min_volume: { type: 'number' },
-          max_volume: { type: 'number' },
+          volume: { type: 'number' },
           commission_rate: { type: 'number' },
           tier_order: { type: 'number' },
           is_active: { type: 'boolean' }

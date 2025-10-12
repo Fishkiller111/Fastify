@@ -31,19 +31,17 @@ export async function up() {
       );
     `);
 
-    // 3. 反佣等级配置表
+    // 3. 反佣等级配置表 - 使用单个volume字段
     await client.query(`
       CREATE TABLE IF NOT EXISTS commission_tiers (
         id SERIAL PRIMARY KEY,
         tier_name VARCHAR(50) NOT NULL,
-        min_volume DECIMAL(20, 2) NOT NULL,
-        max_volume DECIMAL(20, 2),
+        volume DECIMAL(20, 2) NOT NULL,
         commission_rate DECIMAL(5, 4) NOT NULL,
         tier_order INTEGER NOT NULL,
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT check_volume_range CHECK (max_volume IS NULL OR max_volume > min_volume),
         CONSTRAINT check_commission_rate CHECK (commission_rate >= 0 AND commission_rate <= 1)
       );
     `);
@@ -82,13 +80,12 @@ export async function up() {
 
     // 插入默认反佣等级
     await client.query(`
-      INSERT INTO commission_tiers (tier_name, min_volume, max_volume, commission_rate, tier_order)
+      INSERT INTO commission_tiers (tier_name, volume, commission_rate, tier_order)
       VALUES
-        ('青铜', 0, 1000, 0.01, 1),
-        ('白银', 1000, 5000, 0.015, 2),
-        ('黄金', 5000, 10000, 0.02, 3),
-        ('铂金', 10000, 50000, 0.025, 4),
-        ('钻石', 50000, NULL, 0.03, 5)
+        ('CipherSignal', 0, 0.01, 1),
+        ('ShadowTact', 50000, 0.015, 2),
+        ('MajorWin', 250000, 0.02, 3),
+        ('SealOracle', 500000, 0.025, 4),
       ON CONFLICT DO NOTHING;
     `);
 
