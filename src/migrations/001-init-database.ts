@@ -11,28 +11,38 @@ function createPool() {
   });
 }
 
+/**
+ * 确保数据库存在的异步函数
+ * 如果数据库不存在，则创建一个新的数据库
+ * 如果数据库已存在，则不会重复创建
+ */
 async function ensureDatabaseExists() {
+  // 创建一个PostgreSQL客户端连接，用于管理数据库
   const adminClient = new Client({
-    host: config.database.host,
-    port: config.database.port,
-    database: "postgres",
-    user: config.database.user,
-    password: config.database.password,
+    host: config.database.host, // 数据库主机地址
+    port: config.database.port, // 数据库端口号
+    database: "postgres", // 连接到默认的postgres数据库
+    user: config.database.user, // 数据库用户名
+    password: config.database.password, // 数据库密码
   });
 
   try {
-    await adminClient.connect();
+    await adminClient.connect(); // 尝试连接到数据库
+    // 获取数据库名称，并过滤掉特殊字符，只保留字母、数字和下划线
     const dbName = config.database.database.replace(/[^a-zA-Z0-9_]/g, "_");
+    // 创建SQL语句，创建指定名称的数据库
     await adminClient.query(`CREATE DATABASE "${dbName}"`);
     console.log(`✅ 数据库 ${dbName} 创建成功`);
   } catch (error: any) {
+    // 检查错误代码，42P04表示数据库已存在
     if (error.code === "42P04") {
       console.log(`ℹ️ 数据库 ${config.database.database} 已存在`);
     } else {
       console.error("❌ 创建数据库时出错:", error);
-      throw error;
+      throw error; // 抛出其他类型的错误
     }
   } finally {
+    // 无论成功或失败，最后都关闭数据库连接
     await adminClient.end();
   }
 }
@@ -181,7 +191,7 @@ async function up() {
         ('session_timeout', '3600', '会话超时时间（秒）'),
         ('password_min_length', '6', '密码最小长度'),
         ('email_verification_required', 'false', '是否需要邮箱验证'),
-        ('phone_verification_required', 'false', '是否需要手机号验证')
+        ('phone_verification_required', 'false', '是否需要手机号验证'),
         ('membership_system_enabled', 'true', '是否启用会员系统'),
         ('points_system_enabled', 'true', '是否启用积分系统'),
         ('points_expiry_days', '365', '积分有效期（天）'),

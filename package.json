@@ -58,11 +58,15 @@
     "@fastify/swagger-ui": "^5.2.3",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
+    "alipay-sdk": "^3.6.0",
+    "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
+    "crypto-js": "^4.2.0",
     "dotenv": "^17.2.2",
     "fastify": "^5.6.1",
     "fastify-plugin": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "jsrsasign": "^11.1.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {
