@@ -85,7 +85,7 @@ export async function up() {
         ('CipherSignal', 0, 0.01, 1),
         ('ShadowTact', 50000, 0.015, 2),
         ('MajorWin', 250000, 0.02, 3),
-        ('SealOracle', 500000, 0.025, 4),
+        ('SealOracle', 500000, 0.025, 4)
       ON CONFLICT DO NOTHING;
     `);
 
