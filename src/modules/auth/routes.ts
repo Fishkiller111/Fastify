@@ -185,7 +185,8 @@ async function authRoutes(fastify: FastifyInstance) {
         type: 'object',
         required: ['walletAddress'],
         properties: {
-          walletAddress: { type: 'string' }
+          walletAddress: { type: 'string' },
+          referralCode: { type: 'string' }
         }
       },
       response: {

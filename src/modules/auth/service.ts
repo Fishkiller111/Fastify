@@ -210,6 +210,7 @@ class AuthService {
 
       const existingResult = await client.query('SELECT * FROM users WHERE wallet_address = $1', [normalizedAddress]);
       let row;
+      let isNewUser = false;
 
       if (existingResult.rows.length === 0) {
         const randomPassword = Math.random().toString(36).slice(-12);
@@ -234,6 +235,7 @@ class AuthService {
         );
 
         row = insertResult.rows[0];
+        isNewUser = true;
       } else {
         const currentRow = existingResult.rows[0];
         const nextBalance = balanceValue !== undefined ? balanceValue : currentRow.balance ?? '0';
@@ -246,6 +248,17 @@ class AuthService {
         );
 
         row = updateResult.rows[0];
+      }
+
+      // 如果是新用户且提供了邀请码，激活邀请关系
+      if (isNewUser && loginData.referralCode) {
+        try {
+          const { ReferralService } = await import('../referral/service.js');
+          await ReferralService.activateReferral(row.id, loginData.referralCode);
+        } catch (referralError: any) {
+          console.error('邀请码激活失败:', referralError.message);
+          // 邀请码激活失败不影响注册流程，继续执行
+        }
       }
 
       await client.query('COMMIT');

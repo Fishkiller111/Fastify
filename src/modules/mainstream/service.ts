@@ -233,17 +233,29 @@ export async function createMainstreamEvent(
     const odds = calculateOdds(parseFloat(event.yes_pool), parseFloat(event.no_pool));
     const oddsAtBet = data.creator_side === 'yes' ? odds.yes_odds : odds.no_odds;
 
-    await client.query(
+    const betResult = await client.query(
       `INSERT INTO meme_bets
        (event_id, user_id, bet_type, bet_amount, odds_at_bet, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')`,
+       VALUES ($1, $2, $3, $4, $5, 'pending')
+       RETURNING id`,
       [event.id, creatorId, data.creator_side, data.initial_pool_amount, oddsAtBet]
     );
+
+    const betId = betResult.rows[0].id;
 
     // 记录初始K线数据
     await EventKlineService.recordOddsSnapshot(event.id);
 
     await client.query('COMMIT');
+
+    // 记录佣金（如果创建者有邀请人）
+    try {
+      const { ReferralService } = await import('../referral/service.js');
+      await ReferralService.recordCommission(creatorId, betId, data.initial_pool_amount);
+    } catch (commissionError) {
+      console.error('佣金记录失败:', commissionError);
+      // 佣金记录失败不影响创建流程
+    }
 
     // 返回完整事件信息
     return {
@@ -495,6 +507,8 @@ export async function placeMainstreamBet(
       [data.event_id, userId, data.bet_type, data.bet_amount, oddsAtBet]
     );
 
+    const betId = betResult.rows[0].id;
+
     await client.query('COMMIT');
 
     // 记录K线数据（事务外执行，避免死锁）
@@ -503,6 +517,15 @@ export async function placeMainstreamBet(
     } catch (klineError) {
       console.error('K线数据记录失败:', klineError);
       // K线记录失败不影响主流程
+    }
+
+    // 记录佣金（如果用户有邀请人）
+    try {
+      const { ReferralService } = await import('../referral/service.js');
+      await ReferralService.recordCommission(userId, betId, data.bet_amount);
+    } catch (commissionError) {
+      console.error('佣金记录失败:', commissionError);
+      // 佣金记录失败不影响下注流程
     }
 
     return betResult.rows[0];
@@ -665,6 +688,15 @@ export async function settleMainstreamEvent(eventId: number): Promise<void> {
       );
 
       console.log(`   用户 ${bet.user_id}: 投注 $${betAmount}, 赔付 $${payout}`);
+
+      // 结算对应的佣金
+      try {
+        const { ReferralService } = await import('../referral/service.js');
+        await ReferralService.settleCommission(bet.id);
+      } catch (commissionError) {
+        console.error(`   佣金结算失败 (bet_id: ${bet.id}):`, commissionError);
+        // 佣金结算失败不影响主流程
+      }
     }
 
     // 更新失败的投注

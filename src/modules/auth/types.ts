@@ -45,6 +45,7 @@ export interface SMSLoginRequest {
 export interface WalletLoginRequest {
   walletAddress: string;
   balance?: string | number;
+  referralCode?: string;
 }
 
 // JWT载荷接口

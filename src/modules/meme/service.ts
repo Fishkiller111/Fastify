@@ -248,10 +248,21 @@ export async function placeBet(
       [data.event_id, userId, data.bet_type, data.bet_amount, currentOdds, potentialPayout]
     );
 
+    const betId = betResult.rows[0].id;
+
     await client.query('COMMIT');
 
     // 记录赔率快照
     await EventKlineService.recordOddsSnapshot(data.event_id);
+
+    // 记录佣金（如果用户有邀请人）
+    try {
+      const { ReferralService } = await import('../referral/service.js');
+      await ReferralService.recordCommission(userId, betId, data.bet_amount);
+    } catch (commissionError) {
+      console.error('佣金记录失败:', commissionError);
+      // 佣金记录失败不影响下注流程
+    }
 
     return betResult.rows[0];
   } catch (error) {
@@ -352,6 +363,15 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
         'UPDATE users SET balance = balance + $1 WHERE id = $2',
         [payout, bet.user_id]
       );
+
+      // 结算对应的佣金
+      try {
+        const { ReferralService } = await import('../referral/service.js');
+        await ReferralService.settleCommission(bet.id);
+      } catch (commissionError) {
+        console.error(`佣金结算失败 (bet_id: ${bet.id}):`, commissionError);
+        // 佣金结算失败不影响主流程
+      }
     }
 
     // 更新失败的投注
