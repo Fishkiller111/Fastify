@@ -248,12 +248,28 @@ export async function placeBet(
       [data.event_id, userId, data.bet_type, data.bet_amount, currentOdds, potentialPayout]
     );
 
-    const betId = betResult.rows[0].id;
+    const betRow = betResult.rows[0];
+    const betId = betRow.id;
 
     await client.query('COMMIT');
 
     // 记录赔率快照
     await EventKlineService.recordOddsSnapshot(data.event_id);
+
+    // 记录买入点
+    try {
+      await EventKlineService.recordBuyPoint({
+        bet_id: betRow.id,
+        event_id: betRow.event_id,
+        user_id: betRow.user_id,
+        bet_type: betRow.bet_type,
+        bet_amount: parseFloat(betRow.bet_amount),
+        yes_odds_at_bet: odds.yesOdds,
+        no_odds_at_bet: odds.noOdds,
+      });
+    } catch (buyPointError) {
+      console.error('K线买入点记录失败:', buyPointError);
+    }
 
     // 记录佣金（如果用户有邀请人）
     try {

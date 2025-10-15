@@ -1,5 +1,12 @@
 import pool from '../../config/database.js';
-import { EventOddsKline, OddsSnapshot, KlineInterval, EventKlineQueryParams } from './types.js';
+import {
+  EventOddsKline,
+  OddsSnapshot,
+  KlineInterval,
+  EventKlineQueryParams,
+  CreateKlineBuyRecordInput,
+  KlineBuyRecord,
+} from './types.js';
 
 class EventKlineService {
   /**
@@ -194,6 +201,50 @@ class EventKlineService {
     return map[interval] || 60 * 1000;
   }
 
+  /**
+   * 记录用户在K线上买入点
+   */
+  async recordBuyPoint(data: CreateKlineBuyRecordInput): Promise<void> {
+    await pool.query(
+      `INSERT INTO kline_buy_records (bet_id, event_id, user_id, bet_type, bet_amount, yes_odds_at_bet, no_odds_at_bet)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (bet_id) DO NOTHING`,
+      [
+        data.bet_id,
+        data.event_id,
+        data.user_id,
+        data.bet_type,
+        data.bet_amount,
+        data.yes_odds_at_bet,
+        data.no_odds_at_bet,
+      ]
+    );
+  }
+
+  /**
+   * 获取指定用户在某事件下的买入记录
+   */
+  async getUserBuyPoints(eventId: number, userId: number): Promise<KlineBuyRecord[]> {
+    const result = await pool.query(
+      `SELECT id, bet_id, event_id, user_id, bet_type, bet_amount, yes_odds_at_bet, no_odds_at_bet, created_at
+       FROM kline_buy_records
+       WHERE event_id = $1 AND user_id = $2
+       ORDER BY created_at ASC`,
+      [eventId, userId]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      bet_id: row.bet_id,
+      event_id: row.event_id,
+      user_id: row.user_id,
+      bet_type: row.bet_type,
+      bet_amount: parseFloat(row.bet_amount),
+      yes_odds_at_bet: parseFloat(row.yes_odds_at_bet),
+      no_odds_at_bet: parseFloat(row.no_odds_at_bet),
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    }));
+  }
 }
 
 export default new EventKlineService();

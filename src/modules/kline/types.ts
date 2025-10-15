@@ -54,3 +54,26 @@ export interface EventKlineWSMessage {
   interval?: KlineInterval;
   data?: EventOddsKline | OddsSnapshot;
 }
+
+// K线买入记录
+export interface KlineBuyRecord {
+  id: number;
+  bet_id: number;
+  event_id: number;
+  user_id: number;
+  bet_type: 'yes' | 'no';
+  bet_amount: number;
+  yes_odds_at_bet: number;
+  no_odds_at_bet: number;
+  created_at: string;
+}
+
+export interface CreateKlineBuyRecordInput {
+  bet_id: number;
+  event_id: number;
+  user_id: number;
+  bet_type: 'yes' | 'no';
+  bet_amount: number;
+  yes_odds_at_bet: number;
+  no_odds_at_bet: number;
+}

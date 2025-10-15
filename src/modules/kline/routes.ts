@@ -140,6 +140,54 @@ async function klineRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // 获取当前用户在事件下的买入记录
+  fastify.get('/events/:eventId/buy-records', {
+    schema: {
+      description: '获取当前用户在指定事件下的买入记录',
+      tags: ['K线'],
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        required: ['eventId'],
+        properties: {
+          eventId: { type: 'number' },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              bet_type: { type: 'string', enum: ['yes', 'no'] },
+              bet_amount: { type: 'number' },
+              yes_odds_at_bet: { type: 'number' },
+              created_at: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    preHandler: fastify.userAuth(),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { eventId } = request.params as { eventId: number };
+      const userId = (request as any).user.userId;
+      const records = await EventKlineService.getUserBuyPoints(eventId, userId);
+
+      reply.send(
+        records.map(record => ({
+          bet_type: record.bet_type,
+          bet_amount: record.bet_amount,
+          yes_odds_at_bet: record.yes_odds_at_bet,
+          created_at: record.created_at,
+        }))
+      );
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // WebSocket使用文档
   fastify.get('/websocket-docs', {
     schema: {

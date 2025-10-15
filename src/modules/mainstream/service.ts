@@ -507,7 +507,8 @@ export async function placeMainstreamBet(
       [data.event_id, userId, data.bet_type, data.bet_amount, oddsAtBet]
     );
 
-    const betId = betResult.rows[0].id;
+    const betRow = betResult.rows[0];
+    const betId = betRow.id;
 
     await client.query('COMMIT');
 
@@ -517,6 +518,21 @@ export async function placeMainstreamBet(
     } catch (klineError) {
       console.error('K线数据记录失败:', klineError);
       // K线记录失败不影响主流程
+    }
+
+    // 记录买入点（事务外执行，避免影响下注流程）
+    try {
+      await EventKlineService.recordBuyPoint({
+        bet_id: betRow.id,
+        event_id: betRow.event_id,
+        user_id: betRow.user_id,
+        bet_type: betRow.bet_type,
+        bet_amount: parseFloat(betRow.bet_amount),
+        yes_odds_at_bet: odds.yes_odds,
+        no_odds_at_bet: odds.no_odds,
+      });
+    } catch (buyPointError) {
+      console.error('K线买入点记录失败:', buyPointError);
     }
 
     // 记录佣金（如果用户有邀请人）
