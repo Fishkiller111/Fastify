@@ -6,8 +6,10 @@ import { VersionedTransaction, Connection, Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import config from '../../config/index.js';
 import type {
-  CreateTokenRequest,
   CreateTokenResponse,
+  PrepareCreateTokenRequest,
+  PrepareCreateTokenResponse,
+  SubmitSignedTransactionRequest,
   IPFSMetadataResponse,
   PumpPortalTradeRequest,
 } from './types.js';
@@ -29,7 +31,7 @@ export class PumpFunService {
    * 上传元数据到 IPFS
    */
   private static async uploadMetadataToIPFS(
-    tokenMetadata: CreateTokenRequest['tokenMetadata'],
+    tokenMetadata: PrepareCreateTokenRequest['tokenMetadata'],
     imageUrl?: string
   ): Promise<IPFSMetadataResponse> {
     try {
@@ -126,23 +128,22 @@ export class PumpFunService {
   }
 
   /**
-   * 创建 PumpFun 代币
+   * 准备创建代币交易（返回待签名交易）
    */
-  static async createToken(request: CreateTokenRequest): Promise<CreateTokenResponse> {
+  static async prepareCreateToken(
+    request: PrepareCreateTokenRequest
+  ): Promise<PrepareCreateTokenResponse> {
     try {
-      // 1. 解析钱包私钥
-      const signerKeyPair = Keypair.fromSecretKey(bs58.decode(request.walletPrivateKey));
-      const publicKey = signerKeyPair.publicKey.toBase58();
-
-      // 2. 生成随机 mint keypair
+      // 1. 生成随机 mint keypair
       const mintKeypair = Keypair.generate();
       const mintAddress = mintKeypair.publicKey.toBase58();
+      const mintPrivateKey = bs58.encode(mintKeypair.secretKey);
 
-      console.log('创建代币中...');
+      console.log('准备创建代币交易...');
       console.log('Mint 地址:', mintAddress);
-      console.log('钱包地址:', publicKey);
+      console.log('钱包地址:', request.walletPublicKey);
 
-      // 3. 上传元数据到 IPFS
+      // 2. 上传元数据到 IPFS
       console.log('上传元数据到 IPFS...');
       const ipfsResponse = await this.uploadMetadataToIPFS(
         request.tokenMetadata,
@@ -151,10 +152,10 @@ export class PumpFunService {
 
       console.log('IPFS URI:', ipfsResponse.metadataUri);
 
-      // 4. 创建交易
+      // 3. 创建交易
       console.log('创建交易...');
       const txData = await this.createTokenTransaction(
-        publicKey,
+        request.walletPublicKey,
         mintAddress,
         ipfsResponse.metadataUri,
         ipfsResponse.metadata.name,
@@ -164,16 +165,50 @@ export class PumpFunService {
         request.priorityFee || 0.0005
       );
 
-      // 5. 反序列化、签名并发送交易
-      console.log('签名并发送交易...');
-      const connection = this.getConnection();
+      // 4. 反序列化交易并用 mint keypair 部分签名
       const tx = VersionedTransaction.deserialize(new Uint8Array(txData));
-      tx.sign([mintKeypair, signerKeyPair]);
+      tx.sign([mintKeypair]); // 只用 mint keypair 签名，用户钱包稍后签名
 
+      // 5. 序列化交易为 Base64
+      const serializedTx = Buffer.from(tx.serialize()).toString('base64');
+
+      console.log('待签名交易已准备好');
+
+      return {
+        success: true,
+        transaction: serializedTx,
+        mintAddress: mintAddress,
+        mintPrivateKey: mintPrivateKey, // 返回给前端临时保存，提交签名时需要
+      };
+    } catch (error) {
+      console.error('准备创建代币交易失败:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * 提交已签名的交易
+   */
+  static async submitSignedTransaction(
+    request: SubmitSignedTransactionRequest
+  ): Promise<CreateTokenResponse> {
+    try {
+      console.log('提交已签名交易...');
+      console.log('Mint 地址:', request.mintAddress);
+
+      // 1. 反序列化交易
+      const txBuffer = Buffer.from(request.signedTransaction, 'base64');
+      const tx = VersionedTransaction.deserialize(txBuffer);
+
+      // 2. 发送交易
+      const connection = this.getConnection();
       const signature = await connection.sendTransaction(tx);
       console.log('交易已发送:', signature);
 
-      // 6. 等待确认
+      // 3. 等待确认
       console.log('等待交易确认...');
       await connection.confirmTransaction(signature, 'confirmed');
 
@@ -184,26 +219,14 @@ export class PumpFunService {
         success: true,
         signature: signature,
         txUrl: txUrl,
-        mintAddress: mintAddress,
+        mintAddress: request.mintAddress,
       };
     } catch (error) {
-      console.error('创建代币失败:', error);
+      console.error('提交交易失败:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
-    }
-  }
-
-  /**
-   * 验证钱包私钥格式
-   */
-  static validatePrivateKey(privateKey: string): boolean {
-    try {
-      const decoded = bs58.decode(privateKey);
-      return decoded.length === 64; // Solana 私钥应该是 64 字节
-    } catch (error) {
-      return false;
     }
   }
 }

@@ -27,10 +27,10 @@ export interface IPFSMetadataResponse {
   metadataUri: string;
 }
 
-// 创建代币请求
-export interface CreateTokenRequest {
-  // 钱包私钥 (Base58 编码)
-  walletPrivateKey: string;
+// 准备创建代币请求（获取待签名交易）
+export interface PrepareCreateTokenRequest {
+  // 钱包公钥
+  walletPublicKey: string;
   // 代币元数据
   tokenMetadata: {
     name: string;
@@ -51,7 +51,28 @@ export interface CreateTokenRequest {
   priorityFee?: number;
 }
 
-// 创建代币响应
+// 准备创建代币响应
+export interface PrepareCreateTokenResponse {
+  success: boolean;
+  // 序列化的待签名交易（Base64 编码）
+  transaction?: string;
+  // Mint 地址
+  mintAddress?: string;
+  // Mint 私钥（Base58 编码，需要保存用于后续签名）
+  mintPrivateKey?: string;
+  // 错误信息
+  error?: string;
+}
+
+// 提交已签名交易请求
+export interface SubmitSignedTransactionRequest {
+  // 用户签名后的交易（Base64 编码）
+  signedTransaction: string;
+  // Mint 地址
+  mintAddress: string;
+}
+
+// 创建代币响应（通用响应）
 export interface CreateTokenResponse {
   success: boolean;
   signature?: string;
