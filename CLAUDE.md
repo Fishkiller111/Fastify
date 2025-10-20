@@ -28,6 +28,39 @@ npm run migrate        # Initialize database schema
 npm run dev            # Start development server
 ```
 
+### Environment Variables
+Required configuration in `.env` file:
+```bash
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=your_database
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+
+# JWT
+JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
+
+# Server
+PORT=7000
+HOST=0.0.0.0
+
+# Redis (Optional - for caching)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# Frontend URL (for referral links)
+FRONTEND_URL=http://localhost:3000
+
+# Aliyun SMS (Optional - for SMS verification)
+ALIYUN_ACCESS_KEY_ID=your_access_key_id
+ALIYUN_ACCESS_KEY_SECRET=your_access_key_secret
+ALIYUN_SMS_SIGN_NAME=your_sms_sign_name
+ALIYUN_SMS_TEMPLATE_CODE=your_sms_template_code
+```
+
 ## Architecture Overview
 
 This is a **Fastify-based REST API** with TypeScript, JWT authentication, and PostgreSQL database.
@@ -40,12 +73,21 @@ This is a **Fastify-based REST API** with TypeScript, JWT authentication, and Po
 ### Directory Structure
 ```
 src/
-├── config/           # Environment and database configuration
-├── migrations/       # Database schema migrations
-├── modules/          # Feature modules (auth, user, meme, kline, verification, sms, config)
-├── plugins/          # Fastify plugins (JWT authentication)
+├── config/           # Environment and database configuration (database, redis, index)
+├── migrations/       # Database schema migrations (sequential numbering)
+├── modules/          # Feature modules (modular architecture)
+│   ├── auth/        # Authentication (email, SMS, wallet login)
+│   ├── user/        # User profile and betting history
+│   ├── meme/        # Meme token prediction events
+│   ├── mainstream/  # Mainstream coin price prediction
+│   ├── kline/       # K-line data and WebSocket
+│   ├── referral/    # Referral codes and commission system
+│   ├── verification/# SMS verification
+│   ├── sms/         # Aliyun SMS service
+│   └── config/      # Dynamic configuration storage
+├── plugins/          # Fastify plugins (JWT, authentication middleware)
 ├── routes/           # Route registration and organization
-├── scripts/          # Utility scripts
+├── scripts/          # Utility scripts (SMS config initialization)
 └── server.ts         # Application entry point
 ```
 
@@ -94,7 +136,14 @@ Each module follows this structure:
 ### Configuration Management
 - **Environment**: Uses `dotenv` with `.env` file
 - **Structure**: Centralized config in `src/config/index.ts`
-- **Key Settings**: Database connection, JWT secret, server host/port
+- **Key Settings**: Database connection, JWT secret, server host/port, Redis connection, frontend URL
+
+#### Redis Integration
+- **Purpose**: Caching, session management, and real-time data storage
+- **Configuration**: `src/config/redis.ts` with connection pooling and retry strategy
+- **Environment Variables**: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`
+- **Connection Management**: Auto-reconnect with exponential backoff (max 2 seconds delay)
+- **Event Monitoring**: Console logging for connect, error, and close events
 
 ### Database Schema
 - **Users**: Authentication, profile data, role-based access control (RBAC)
@@ -117,8 +166,14 @@ Each module follows this structure:
   - Unified table for both meme and mainstream event bets
 - **Event Klines** (`klines`): Historical odds snapshots for K-line chart visualization
   - Timestamp-based records with yes_odds, no_odds, pools, total_bets
+- **Referral System Tables** (Migration 008):
+  - **referral_codes**: User-generated invitation codes (8-char alphanumeric, unique)
+  - **referral_relationships**: Tracks inviter-invitee relationships (one invitee per inviter)
+  - **commission_tiers**: Tiered commission structure based on trading volume
+    - Default tiers: CipherSignal (1%), ShadowTact (1.5%), MajorWin (2%), SealOracle (2.5%)
+  - **commission_records**: Commission tracking with pending/settled/cancelled states
 - **Migrations**: Version-controlled schema changes with sequential numbering
-  - Latest: 007-add-coin-icon.ts (adds icon_url to big_coins table)
+  - Latest: 009-create-kline-buy-records.ts
 
 ## Important Implementation Notes
 
@@ -483,3 +538,139 @@ Two endpoints for cleaning up settled prediction market events:
 ```
 
 **Implementation**: Uses database transactions to ensure data integrity during cascade deletion
+
+## Referral & Commission System
+
+This API includes a comprehensive referral system with tiered commissions based on trading volume.
+
+### System Architecture
+
+#### Invitation Flow
+1. **Generate Referral Code**: User generates unique 8-character alphanumeric code
+2. **Share Code**: Inviter shares code with potential invitees
+3. **Code Validation**: System validates code during registration/first bet
+4. **Relationship Creation**: Creates inviter-invitee relationship (one-to-one)
+5. **Commission Tracking**: Automatically tracks commissions on invitee's bets
+
+#### Commission Tiers
+Trading volume-based tier system with automatic progression:
+- **CipherSignal**: $0+ volume → 1% commission
+- **ShadowTact**: $50,000+ volume → 1.5% commission
+- **MajorWin**: $250,000+ volume → 2% commission
+- **SealOracle**: $500,000+ volume → 2.5% commission
+
+**Tier Calculation**: Based on cumulative trading volume of all invitees
+
+### Key Service Methods
+
+#### Referral Code Management
+**Location**: `src/modules/referral/service.ts`
+
+```typescript
+// Generate or retrieve user's referral code
+ReferralService.generateReferralCode(userId: number): Promise<ReferralCode>
+
+// Validate referral code
+ReferralService.validateReferralCode(code: string): Promise<ReferralCode | null>
+
+// Activate referral relationship
+ReferralService.activateReferral(inviteeId: number, code: string): Promise<ReferralRelationship>
+```
+
+#### Commission Operations
+```typescript
+// Record commission when invitee places bet
+ReferralService.recordCommission(
+  inviteeId: number,
+  betId: number,
+  betAmount: number
+): Promise<CommissionRecord | null>
+
+// Settle commission when bet event is settled
+ReferralService.settleCommission(betId: number): Promise<void>
+```
+
+#### Statistics & Reporting
+```typescript
+// Get comprehensive referral statistics
+ReferralService.getReferralStatistics(userId: number): Promise<ReferralStatistics>
+
+// Get list of invitees with their betting activity
+ReferralService.getInviteesList(
+  inviterId: number,
+  limit?: number,
+  offset?: number
+): Promise<Array<InviteeInfo>>
+
+// Get commission records
+ReferralService.getCommissionRecords(
+  inviterId: number,
+  limit?: number,
+  offset?: number
+): Promise<CommissionRecord[]>
+```
+
+### API Endpoints
+
+**User Endpoints** (`/api/referral/*`):
+- `POST /code` - Generate or retrieve referral code
+- `GET /code` - Get user's referral code
+- `POST /activate` - Activate referral relationship with code
+- `GET /statistics` - Get referral statistics (invitees, volume, commissions, tier progress)
+- `GET /invitees` - List all invitees with their betting activity
+- `GET /commissions` - List commission records with pagination
+
+**Admin Endpoints** (`/api/admin/referral/*`):
+- `GET /tiers` - Get all commission tiers
+- `POST /tiers` - Create new commission tier
+- `PUT /tiers/:id` - Update commission tier configuration
+- `DELETE /tiers/:id` - Delete commission tier
+
+### Integration Points
+
+#### Registration/Login Integration
+Referral code can be provided during:
+- User registration (any login method)
+- First bet placement (if not set during registration)
+
+#### Betting Flow Integration
+When invitee places a bet:
+1. **Record Commission**: `ReferralService.recordCommission()` called in bet service
+2. **Commission State**: Creates `pending` commission record
+3. **Tier Calculation**: Uses current tier based on inviter's total volume
+4. **Amount Calculation**: `commission_amount = bet_amount × commission_rate`
+
+#### Settlement Flow Integration
+When bet event is settled:
+1. **Trigger**: Auto-settlement system or manual admin settlement
+2. **Commission Settlement**: `ReferralService.settleCommission()` called
+3. **Balance Update**: Adds commission to inviter's balance
+4. **State Change**: Commission record status: `pending` → `settled`
+
+### Critical Business Rules
+
+**Referral Code Constraints**:
+- One active code per user
+- 8-character alphanumeric format
+- Uniqueness enforced at database level
+- Cannot use own referral code
+
+**Relationship Constraints**:
+- One invitee can only be invited by one inviter
+- Relationship is permanent (no deletion)
+- Activation timestamp tracked for analytics
+
+**Commission Rules**:
+- Commission calculated at bet placement time using current tier
+- Commission rate locked when bet is placed
+- Tier progression affects future bets, not past ones
+- Volume aggregated across all invitees for tier calculation
+
+### Environment Configuration
+Add to `.env.template`:
+```bash
+# 前端URL配置 (用于生成邀请链接)
+FRONTEND_URL=http://localhost:3000
+```
+
+**Invitation Link Format**: `${FRONTEND_URL}/register?ref=${referral_code}`
