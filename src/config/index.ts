@@ -34,12 +34,18 @@ interface RedisConfig {
   db: number;
 }
 
+// Solana配置接口
+interface SolanaConfig {
+  rpcEndpoint: string;
+}
+
 // 应用配置接口
 interface AppConfig {
   server: ServerConfig;
   database: DatabaseConfig;
   jwt: JWTConfig;
   redis: RedisConfig;
+  solana: SolanaConfig;
 }
 
 // 配置对象
@@ -65,7 +71,10 @@ const config: AppConfig = {
     password: process.env.REDIS_PASSWORD || '',
     db: parseInt(process.env.REDIS_DB || '0', 10),
   },
+  solana: {
+    rpcEndpoint: process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com',
+  },
 };
 
 export default config;
-export type { DatabaseConfig, ServerConfig, JWTConfig, RedisConfig, AppConfig };
+export type { DatabaseConfig, ServerConfig, JWTConfig, RedisConfig, SolanaConfig, AppConfig };
