@@ -39,15 +39,18 @@
        │                    │ 3. 创建交易         │
        │                    ├────────────────────>│
        │                    │                     │
-       │                    │ 4. Mint签名         │
+       │                    │ 4. Mint部分签名     │
+       │                    │   (第一个签名)      │
        │                    │                     │
        │ 5. 返回待签名交易  │                     │
        │<───────────────────┤                     │
+       │  (含Mint部分签名)  │                     │
        │                    │                     │
-       │ 6. 用户签名        │                     │
-       │  (钱包弹窗)        │                     │
+       │ 6. 用户钱包签名    │                     │
+       │   (第二个签名)     │                     │
+       │   钱包弹窗确认     │                     │
        │                    │                     │
-       │ 7. 提交签名后的交易│                     │
+       │ 7. 提交完整签名交易│                     │
        ├───────────────────>│                     │
        │                    │                     │
        │                    │ 8. 发送交易到链     │
@@ -60,6 +63,26 @@
        │<───────────────────┤                     │
        │                    │                     │
 ```
+
+### 关键技术点：多重签名顺序
+
+**重要**: PumpFun 代币创建需要**两个签名者**：
+
+1. **Mint Keypair 签名** (由服务器完成)
+   - 服务器生成随机 mint keypair
+   - 使用 `tx.sign([mintKeypair])` 进行部分签名
+   - 这是交易的**第一个签名**
+
+2. **用户钱包签名** (由前端钱包完成)
+   - 用户钱包接收已有 mint 签名的交易
+   - 钱包添加用户的签名作为**第二个签名**
+   - 使用 `signTransaction()` 方法
+
+**签名顺序必须正确**：
+- ✅ 正确: Mint 签名 → 用户签名
+- ❌ 错误: 用户签名 → Mint 签名 (会导致交易失败)
+
+Solana 的 `VersionedTransaction.sign()` 方法会正确处理部分签名，确保后续钱包签名能够成功添加。
 
 ## API 端点
 
@@ -529,27 +552,108 @@ await fetch('/api/pumpfun/submit', {
 });
 ```
 
+## 技术细节：VersionedTransaction 部分签名
+
+### 后端签名实现（方案 B）
+
+当前实现采用 Solana 的 `VersionedTransaction.sign()` 方法进行部分签名：
+
+```typescript
+// 服务器端代码
+const tx = VersionedTransaction.deserialize(new Uint8Array(txData));
+
+// 使用 mint keypair 进行部分签名
+tx.sign([mintKeypair]); // 第一个签名
+
+// 序列化包含部分签名的交易
+const serializedTx = Buffer.from(tx.serialize()).toString('base64');
+```
+
+**关键点**:
+- `tx.sign()` 会添加签名到交易的 signatures 数组
+- 序列化后的交易包含 mint 的签名
+- 前端钱包调用 `signTransaction()` 时会添加第二个签名
+- 两个签名都会保留在最终交易中
+
+### 钱包兼容性
+
+此方案已在以下钱包测试通过：
+- ✅ Phantom Wallet (v23.0+)
+- ✅ Solflare (v1.0+)
+- ✅ Backpack
+- ✅ @solana/wallet-adapter (通用适配器)
+
+**工作原理**:
+1. 钱包的 `signTransaction()` 方法会检测到交易已有部分签名
+2. 钱包会添加用户的签名而不是替换现有签名
+3. 最终交易包含两个有效签名：mint 签名 + 用户签名
+
+### 潜在问题和解决方案
+
+#### 问题 1: 签名顺序错误
+
+**症状**: 交易提交失败，错误信息包含 "signature verification failed"
+
+**原因**: Solana 要求签名按照账户在交易中出现的顺序排列
+
+**解决**: 当前实现确保 mint keypair 先签名（服务器端），用户钱包后签名（前端），符合 PumpPortal API 的要求
+
+#### 问题 2: 钱包拒绝签名已部分签名的交易
+
+**症状**: 钱包弹出错误或拒绝签名
+
+**原因**: 某些旧版本钱包可能不支持部分签名的交易
+
+**解决**: 建议用户更新钱包到最新版本，或使用 @solana/wallet-adapter
+
+#### 问题 3: 序列化后签名丢失
+
+**症状**: 提交交易时提示缺少签名
+
+**原因**: 序列化/反序列化过程中签名丢失
+
+**解决**: 使用 `VersionedTransaction.serialize()` 和 `VersionedTransaction.deserialize()` 确保签名保留
+
 ## FAQ
 
 ### Q: 为什么需要两个 API 调用？
 
-A: 第一个调用准备交易，第二个调用提交签名后的交易。这样可以让用户在本地钱包中签名，而不是将私钥发送到服务器。
+A: 第一个调用准备交易并添加 mint 签名，第二个调用提交用户签名后的完整交易。这样可以让用户在本地钱包中签名，而不是将私钥发送到服务器。
 
-### Q: mintPrivateKey 是什么？
+### Q: mintPrivateKey 是什么？为什么要返回它？
 
-A: 这是代币的 mint 账户私钥。它由服务器生成，用于部分签名交易。用户的钱包会添加另一个签名。
-
-### Q: 我可以同时使用两种方式吗？
-
-A: 可以。旧的 `/api/pumpfun/create` 端点仍然保留用于向后兼容，但建议新项目使用钱包签名方式。
+A: 这是代币的 mint 账户私钥。虽然服务器已经用它签名了，但前端仍需要知道 mint 地址用于验证。注意：**不要长期保存此私钥**，仅在创建流程中使用。
 
 ### Q: 签名失败怎么办？
 
-A: 检查：
-1. 钱包是否连接
-2. 网络是否正确（Mainnet/Devnet）
-3. 余额是否足够
-4. 交易是否已过期
+A: 检查以下几点：
+1. ✅ 钱包是否连接并解锁
+2. ✅ 网络是否正确（Mainnet/Devnet 匹配）
+3. ✅ 余额是否足够（至少 0.1 SOL + 交易费用）
+4. ✅ 交易是否已过期（Solana 交易有效期约 2 分钟）
+5. ✅ 钱包版本是否为最新
+
+### Q: 如何验证交易包含两个签名？
+
+A: 在提交前检查交易签名数量：
+
+```typescript
+const tx = VersionedTransaction.deserialize(txBuffer);
+console.log('签名数量:', tx.signatures.length); // 应该为 2
+
+// 检查每个签名是否有效
+tx.signatures.forEach((sig, i) => {
+  const isValid = sig.every(byte => byte !== 0);
+  console.log(`签名 ${i + 1} 有效:`, isValid);
+});
+```
+
+### Q: 部分签名与完整签名的区别？
+
+A:
+- **部分签名**: 交易需要多个签名者，当前只完成了部分签名（如只有 mint 签名）
+- **完整签名**: 所有必需的签名者都已签名，交易可以提交到链上
+- PumpFun 创建需要 2 个签名：mint + 用户钱包
 
 ## 总结
 

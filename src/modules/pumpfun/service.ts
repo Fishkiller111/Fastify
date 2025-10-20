@@ -165,11 +165,14 @@ export class PumpFunService {
         request.priorityFee || 0.0005
       );
 
-      // 4. 反序列化交易并用 mint keypair 部分签名
+      // 4. 反序列化交易
       const tx = VersionedTransaction.deserialize(new Uint8Array(txData));
-      tx.sign([mintKeypair]); // 只用 mint keypair 签名，用户钱包稍后签名
 
-      // 5. 序列化交易为 Base64
+      // 5. 使用 mint keypair 部分签名（不序列化整个交易）
+      // 注意：必须先用 mint 签名，然后用户钱包再签名
+      tx.sign([mintKeypair]);
+
+      // 6. 序列化交易为 Base64（包含 mint 的部分签名）
       const serializedTx = Buffer.from(tx.serialize()).toString('base64');
 
       console.log('待签名交易已准备好');
