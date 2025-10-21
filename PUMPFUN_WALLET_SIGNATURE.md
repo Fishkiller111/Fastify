@@ -86,7 +86,86 @@ Solana 的 `VersionedTransaction.sign()` 方法会正确处理部分签名，确
 
 ## API 端点
 
-### 1. 准备创建代币交易
+### 方式对比
+
+| 端点 | 方式 | 使用场景 | 安全性 | 推荐度 |
+|------|------|---------|--------|--------|
+| `/api/pumpfun/create-with-private-key` | 直接私钥 | 自动化、测试、后台任务 | ⚠️ 低 | ⚠️ 谨慎 |
+| `/api/pumpfun/prepare` + `/api/pumpfun/submit` | 钱包签名 | 前端用户交互 | ✅ 高 | ✅ 推荐 |
+
+### 1. 使用私钥直接创建代币（快速方式）
+
+**POST** `/api/pumpfun/create-with-private-key`
+
+直接使用钱包私钥创建代币，一步完成。适合自动化脚本和后台任务。
+
+#### 请求体
+
+```json
+{
+  "walletPrivateKey": "your-private-key-base58",
+  "tokenMetadata": {
+    "name": "My Token",
+    "symbol": "MTK",
+    "description": "This is my awesome token",
+    "twitter": "https://twitter.com/mytoken",
+    "telegram": "https://t.me/mytoken",
+    "website": "https://mytoken.com",
+    "showName": true
+  },
+  "imageUrl": "https://example.com/token-logo.png",
+  "initialBuyAmount": 0.1,
+  "slippage": 10,
+  "priorityFee": 0.0005
+}
+```
+
+#### 响应
+
+```json
+{
+  "success": true,
+  "signature": "5J7Z...3x8K",
+  "txUrl": "https://solscan.io/tx/5J7Z...3x8K",
+  "mintAddress": "9vN2...7Qxm"
+}
+```
+
+**警告**: 此方式需要将私钥发送到服务器，仅适合：
+- ✅ 自动化脚本和机器人
+- ✅ 后台任务和定时任务
+- ✅ 测试和开发环境
+- ✅ 专用账户或服务账户
+
+**不适合**:
+- ❌ 用户的主钱包
+- ❌ 公网环境中的用户
+- ❌ 生产环境的用户交互
+
+### 2. 验证私钥格式
+
+**POST** `/api/pumpfun/validate-private-key`
+
+在提交前验证私钥格式是否有效。
+
+#### 请求体
+
+```json
+{
+  "privateKey": "your-private-key-base58"
+}
+```
+
+#### 响应
+
+```json
+{
+  "valid": true,
+  "message": "私钥格式有效"
+}
+```
+
+### 3. 准备创建代币交易
 
 **POST** `/api/pumpfun/prepare`
 
@@ -126,11 +205,11 @@ Solana 的 `VersionedTransaction.sign()` 方法会正确处理部分签名，确
 
 **重要**: `mintPrivateKey` 需要临时保存在前端，用于第二步提交时验证。
 
-### 2. 提交已签名的交易
+### 4. 提交已签名的交易
 
 **POST** `/api/pumpfun/submit`
 
-提交用户签名后的交易。
+提交用户签名后的交易（钱包签名方式的第二步）。
 
 #### 请求体
 
@@ -154,7 +233,129 @@ Solana 的 `VersionedTransaction.sign()` 方法会正确处理部分签名，确
 
 ## 前端集成示例
 
-### React + Phantom 钱包示例
+### 私钥直接创建方式（自动化脚本）
+
+#### Node.js 脚本示例
+
+```typescript
+import axios from 'axios';
+
+async function createTokenWithPrivateKey() {
+  const apiBaseUrl = 'http://localhost:7000';
+  const jwtToken = 'your-jwt-token';
+
+  // 步骤 1: 验证私钥格式（可选）
+  const validateResponse = await axios.post(
+    `${apiBaseUrl}/api/pumpfun/validate-private-key`,
+    {
+      privateKey: 'your-private-key-base58',
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${jwtToken}`,
+      },
+    }
+  );
+
+  if (!validateResponse.data.valid) {
+    console.error('私钥格式无效');
+    return;
+  }
+
+  // 步骤 2: 直接创建代币
+  try {
+    const createResponse = await axios.post(
+      `${apiBaseUrl}/api/pumpfun/create-with-private-key`,
+      {
+        walletPrivateKey: 'your-private-key-base58',
+        tokenMetadata: {
+          name: 'My Automated Token',
+          symbol: 'AUTO',
+          description: '这是一个自动创建的代币',
+          twitter: 'https://twitter.com/mytoken',
+          telegram: 'https://t.me/mytoken',
+        },
+        imageUrl: 'https://example.com/token-logo.png',
+        initialBuyAmount: 0.1,
+        slippage: 10,
+        priorityFee: 0.0005,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${jwtToken}`,
+        },
+      }
+    );
+
+    if (createResponse.data.success) {
+      console.log('✅ 代币创建成功!');
+      console.log('交易链接:', createResponse.data.txUrl);
+      console.log('Mint 地址:', createResponse.data.mintAddress);
+      console.log('签名:', createResponse.data.signature);
+    } else {
+      console.error('❌ 代币创建失败:', createResponse.data.error);
+    }
+  } catch (error) {
+    console.error('❌ 请求失败:', error.message);
+  }
+}
+
+// 运行脚本
+createTokenWithPrivateKey();
+```
+
+#### Python 脚本示例
+
+```python
+import requests
+import json
+
+API_BASE_URL = 'http://localhost:7000'
+JWT_TOKEN = 'your-jwt-token'
+
+def create_token_with_private_key():
+    # 步骤 1: 验证私钥格式
+    validate_response = requests.post(
+        f'{API_BASE_URL}/api/pumpfun/validate-private-key',
+        json={'privateKey': 'your-private-key-base58'},
+        headers={'Authorization': f'Bearer {JWT_TOKEN}'}
+    )
+
+    if not validate_response.json()['valid']:
+        print('❌ 私钥格式无效')
+        return
+
+    # 步骤 2: 创建代币
+    create_response = requests.post(
+        f'{API_BASE_URL}/api/pumpfun/create-with-private-key',
+        json={
+            'walletPrivateKey': 'your-private-key-base58',
+            'tokenMetadata': {
+                'name': 'My Python Token',
+                'symbol': 'PYT',
+                'description': '通过 Python 脚本创建的代币',
+            },
+            'imageUrl': 'https://example.com/token-logo.png',
+            'initialBuyAmount': 0.1,
+            'slippage': 10,
+            'priorityFee': 0.0005,
+        },
+        headers={'Authorization': f'Bearer {JWT_TOKEN}'}
+    )
+
+    result = create_response.json()
+    if result['success']:
+        print('✅ 代币创建成功!')
+        print(f"交易链接: {result['txUrl']}")
+        print(f"Mint 地址: {result['mintAddress']}")
+    else:
+        print(f"❌ 代币创建失败: {result['error']}")
+
+# 运行脚本
+create_token_with_private_key()
+```
+
+### React + Phantom 钱包示例（钱包签名方式）
 
 ```typescript
 import { Connection, VersionedTransaction } from '@solana/web3.js';
@@ -654,6 +855,47 @@ A:
 - **部分签名**: 交易需要多个签名者，当前只完成了部分签名（如只有 mint 签名）
 - **完整签名**: 所有必需的签名者都已签名，交易可以提交到链上
 - PumpFun 创建需要 2 个签名：mint + 用户钱包
+
+### Q: 私钥方式和钱包签名方式的区别？
+
+A:
+| 方面 | 私钥方式 | 钱包签名方式 |
+|------|---------|-----------|
+| 端点 | `/api/pumpfun/create-with-private-key` | `/api/pumpfun/prepare` + `/api/pumpfun/submit` |
+| 步骤数 | 1 步 | 2 步 |
+| 速度 | 快速 | 略慢（需用户交互） |
+| 安全性 | ⚠️ 低（私钥上传到服务器） | ✅ 高（私钥在客户端） |
+| 使用场景 | 自动化脚本、后台任务 | 用户界面交互 |
+| 推荐度 | ⚠️ 谨慎使用 | ✅ 生产环境推荐 |
+
+### Q: 何时应该使用私钥方式？
+
+A: 仅在以下场景使用私钥方式：
+- ✅ **自动化机器人**: 批量创建代币的自动化脚本
+- ✅ **后台任务**: 定时创建代币的服务
+- ✅ **测试环境**: 开发和测试阶段
+- ✅ **服务账户**: 专用的系统账户（非用户账户）
+
+### Q: 为什么不推荐在生产环境中使用私钥方式？
+
+A: 主要风险包括：
+1. **传输风险**: 私钥通过网络传输到服务器
+2. **存储风险**: 服务器可能被攻击导致私钥泄露
+3. **中间人攻击**: HTTP/HTTPS 配置不当可能导致私钥截获
+4. **日志泄露**: 私钥可能被记录在日志中
+5. **用户信任**: 用户需要信任服务器不会盗取私钥
+
+**建议**: 对于用户面向的应用，始终使用钱包签名方式！
+
+### Q: 如何安全地保存私钥？
+
+A: 如果必须使用私钥方式：
+1. **不要在代码中硬编码**: 使用环境变量
+2. **使用加密**: 对私钥进行加密存储
+3. **限制访问**: 使用 HTTPS、防火墙等
+4. **审计日志**: 记录所有私钥使用
+5. **定期轮换**: 定期更换私钥
+6. **最小权限**: 使用专用账户，限制资金额度
 
 ## 总结
 

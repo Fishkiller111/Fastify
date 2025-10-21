@@ -72,6 +72,30 @@ export interface SubmitSignedTransactionRequest {
   mintAddress: string;
 }
 
+// 使用私钥直接创建代币请求
+export interface CreateTokenWithPrivateKeyRequest {
+  // 钱包私钥 (Base58 编码)
+  walletPrivateKey: string;
+  // 代币元数据
+  tokenMetadata: {
+    name: string;
+    symbol: string;
+    description: string;
+    twitter?: string;
+    telegram?: string;
+    website?: string;
+    showName?: boolean;
+  };
+  // 图片文件路径或 URL
+  imageUrl?: string;
+  // 初始购买金额 (SOL)
+  initialBuyAmount: number;
+  // 滑点容忍度 (%)
+  slippage?: number;
+  // 优先费用 (SOL)
+  priorityFee?: number;
+}
+
 // 创建代币响应（通用响应）
 export interface CreateTokenResponse {
   success: boolean;
