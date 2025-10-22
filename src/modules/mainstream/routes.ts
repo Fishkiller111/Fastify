@@ -167,7 +167,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       const userId = (request as any).user.userId;
       const body = request.body as CreateMainstreamEventRequest;
       const event = await MainstreamService.createMainstreamEvent(userId, body);
-      sendEncryptedResponse(reply, event, 201);
+      reply.code(201).send(event);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -226,7 +226,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
     try {
       const { limit = 20, offset = 0 } = request.query as any;
       const events = await MainstreamService.getMainstreamEvents(limit, offset);
-      sendEncryptedResponse(reply, events);
+      reply.send(events);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -286,7 +286,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: '主流币事件不存在' });
       }
 
-      sendEncryptedResponse(reply, event);
+      reply.send(event);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -384,7 +384,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
         console.error('WebSocket赔率广播失败:', err);
       });
 
-      sendEncryptedResponse(reply, bet, 201);
+      reply.code(201).send(bet);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

@@ -79,7 +79,7 @@ async function klineRoutes(fastify: FastifyInstance) {
         source: query.source || 'pumpfun' // 默认为pumpfun
       }));
 
-      sendEncryptedResponse(reply, klinesWithSource);
+      reply.send(klinesWithSource);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

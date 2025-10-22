@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import UserService from './service.js';
 import { JwtUser } from '../../plugins/jwt.js';
 import { UpdateUserRoleRequest } from '../auth/types.js';
+import { sendEncryptedResponse } from '../../utils/response-helper.js';
 
 // 用户信息已通过auth插件扩展到FastifyRequest中
 
@@ -62,7 +63,7 @@ async function userRoutes(fastify: FastifyInstance) {
       }
       
       console.log('User found:', user);
-      reply.send({
+      sendEncryptedResponse(reply, {
         id: user.id,
         username: user.username,
         email: user.email,

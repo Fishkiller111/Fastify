@@ -65,7 +65,7 @@ async function memeRoutes(fastify: FastifyInstance) {
       const userId = (request as any).user.userId;
       const body = request.body as CreateMemeEventRequest;
       const event = await MemeService.createMemeEvent(userId, body);
-      sendEncryptedResponse(reply, event, 201);
+      reply.code(201).send(event);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -126,7 +126,7 @@ async function memeRoutes(fastify: FastifyInstance) {
       // 广播赔率更新到WebSocket订阅者
       await wsManager.broadcast(body.event_id);
 
-      sendEncryptedResponse(reply, bet, 201);
+      reply.code(201).send(bet);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -226,7 +226,7 @@ async function memeRoutes(fastify: FastifyInstance) {
     try {
       const query = request.query as GetEventsQuery;
       const events = await MemeService.getEvents(query);
-      sendEncryptedResponse(reply, events);
+      reply.send(events);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -279,7 +279,7 @@ async function memeRoutes(fastify: FastifyInstance) {
       if (!event) {
         return reply.code(404).send({ error: '事件不存在' });
       }
-      sendEncryptedResponse(reply, event);
+      reply.send(event);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

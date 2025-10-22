@@ -127,7 +127,7 @@ async function authRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest<{ Body: LoginRequest }>, reply: FastifyReply) => {
     try {
       const { user, token } = await AuthService.loginWithEmail(request.body);
-      sendEncryptedResponse(reply, { user, token });
+      reply.send({ user, token });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -171,7 +171,7 @@ async function authRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest<{ Body: SMSLoginRequest }>, reply: FastifyReply) => {
     try {
       const { user, token } = await AuthService.loginWithSMS(request.body);
-      sendEncryptedResponse(reply, { user, token });
+      reply.send({ user, token });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -304,7 +304,7 @@ async function authRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest<{ Body: LoginRequest | SMSLoginRequest | WalletLoginRequest }>, reply: FastifyReply) => {
     try {
       const { user, token } = await AuthService.login(request.body);
-      sendEncryptedResponse(reply, { user, token });
+      reply.send({ user, token });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -410,7 +410,7 @@ async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      sendEncryptedResponse(reply, { user, token });
+      reply.send({ user, token });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
