@@ -11,7 +11,7 @@ export default async function encryptionPlugin(fastify: FastifyInstance) {
   // ============ 插件初始化 ============
   const nodeEnv = process.env.NODE_ENV;
   const enableEncryptionFlag = process.env.ENABLE_ENCRYPTION;
-  const enableEncryption = nodeEnv === 'production' || enableEncryptionFlag === 'true';
+  const enableEncryption = enableEncryptionFlag === 'true';
 
   console.log(`
 [加密插件] ✨ 加密插件初始化`);
