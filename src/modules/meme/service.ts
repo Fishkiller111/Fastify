@@ -416,6 +416,10 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
   const params: any[] = [];
   let paramCount = 1;
 
+  // 排除 Mainstream 类型事件
+  conditions.push(`type != $${paramCount++}`);
+  params.push('Mainstream');
+
   if (status) {
     conditions.push(`status = $${paramCount++}`);
     params.push(status);
@@ -426,7 +430,7 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
     params.push(type);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   const result = await pool.query(
     `SELECT *,

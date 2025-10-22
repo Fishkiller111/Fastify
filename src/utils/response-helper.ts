@@ -7,7 +7,6 @@ import { encryptData } from './encryption.js';
 
 export function sendEncryptedResponse(reply: FastifyReply, data: any, statusCode: number = 200) {
   const enableEncryption =
-    process.env.NODE_ENV === 'production' || 
     process.env.ENABLE_ENCRYPTION === 'true';
 
   console.log(`[响应助手] 发送加密响应, 启用加密: ${enableEncryption}`);

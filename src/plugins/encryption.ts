@@ -43,7 +43,6 @@ export default async function encryptionPlugin(fastify: FastifyInstance) {
   fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const runtimeEnableEncryption =
-        process.env.NODE_ENV === 'production' ||
         process.env.ENABLE_ENCRYPTION === 'true';
 
       const url = request.url;
@@ -66,7 +65,6 @@ export default async function encryptionPlugin(fastify: FastifyInstance) {
   fastify.addHook('onSend', async (request: FastifyRequest, reply: FastifyReply, payload: any) => {
     try {
       const runtimeEnableEncryption =
-        process.env.NODE_ENV === 'production' ||
         process.env.ENABLE_ENCRYPTION === 'true';
 
       const url = request.url;
