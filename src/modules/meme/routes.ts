@@ -9,6 +9,7 @@ import {
 import * as MemeService from './service.js';
 import { wsManager } from '../kline/websocket.js';
 import EventKlineService from '../kline/service.js';
+import { sendEncryptedResponse } from '../../utils/response-helper.js';
 
 /**
  * Meme事件合约路由
@@ -64,7 +65,7 @@ async function memeRoutes(fastify: FastifyInstance) {
       const userId = (request as any).user.userId;
       const body = request.body as CreateMemeEventRequest;
       const event = await MemeService.createMemeEvent(userId, body);
-      reply.code(201).send(event);
+      sendEncryptedResponse(reply, event, 201);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -125,7 +126,7 @@ async function memeRoutes(fastify: FastifyInstance) {
       // 广播赔率更新到WebSocket订阅者
       await wsManager.broadcast(body.event_id);
 
-      reply.code(201).send(bet);
+      sendEncryptedResponse(reply, bet, 201);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -225,7 +226,7 @@ async function memeRoutes(fastify: FastifyInstance) {
     try {
       const query = request.query as GetEventsQuery;
       const events = await MemeService.getEvents(query);
-      reply.send(events);
+      sendEncryptedResponse(reply, events);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -278,7 +279,7 @@ async function memeRoutes(fastify: FastifyInstance) {
       if (!event) {
         return reply.code(404).send({ error: '事件不存在' });
       }
-      reply.send(event);
+      sendEncryptedResponse(reply, event);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

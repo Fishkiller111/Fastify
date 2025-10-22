@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { EventKlineQueryParams, KlineInterval } from './types.js';
 import EventKlineService from './service.js';
+import { sendEncryptedResponse } from '../../utils/response-helper.js';
 
 /**
  * 事件赔率K线路由
@@ -78,7 +79,7 @@ async function klineRoutes(fastify: FastifyInstance) {
         source: query.source || 'pumpfun' // 默认为pumpfun
       }));
 
-      reply.send(klinesWithSource);
+      sendEncryptedResponse(reply, klinesWithSource);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

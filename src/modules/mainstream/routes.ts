@@ -7,6 +7,7 @@ import {
 import type { PlaceBetRequest } from '../meme/types.js';
 import * as MainstreamService from './service.js';
 import { wsManager } from '../kline/websocket.js';
+import { sendEncryptedResponse } from '../../utils/response-helper.js';
 
 /**
  * 主流币事件合约路由
@@ -166,7 +167,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       const userId = (request as any).user.userId;
       const body = request.body as CreateMainstreamEventRequest;
       const event = await MainstreamService.createMainstreamEvent(userId, body);
-      reply.code(201).send(event);
+      sendEncryptedResponse(reply, event, 201);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -225,7 +226,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
     try {
       const { limit = 20, offset = 0 } = request.query as any;
       const events = await MainstreamService.getMainstreamEvents(limit, offset);
-      reply.send(events);
+      sendEncryptedResponse(reply, events);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -285,7 +286,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: '主流币事件不存在' });
       }
 
-      reply.send(event);
+      sendEncryptedResponse(reply, event);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
@@ -383,7 +384,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
         console.error('WebSocket赔率广播失败:', err);
       });
 
-      reply.code(201).send(bet);
+      sendEncryptedResponse(reply, bet, 201);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }
