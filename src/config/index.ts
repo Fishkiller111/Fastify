@@ -1,9 +1,24 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import pool from './database.js';
 
-// 加载环境变量
-dotenv.config();
+// 获取当前文件所在目录
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 项目根目录：从 src/config 到 project root 是 ../../
+// dist/config 编译后，从 dist/config 到 project root 也是 ../../
+const projectRoot = path.join(__dirname, '../..');
+
+// 根据 NODE_ENV 加载对应的 .env 文件
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = nodeEnv === 'production' ? '.env.production' : '.env.development';
+const envPath = path.join(projectRoot, envFile);
+
+console.log(`[Config] Loading environment from: ${envFile}`);
+console.log(`[Config] Full path: ${envPath}`);
+dotenv.config({ path: envPath });
 
 // 数据库配置接口
 interface DatabaseConfig {
@@ -39,6 +54,12 @@ interface SolanaConfig {
   rpcEndpoint: string;
 }
 
+// 加密配置接口
+interface EncryptionConfig {
+  enabled: boolean;
+  secret: string;
+}
+
 // 应用配置接口
 interface AppConfig {
   server: ServerConfig;
@@ -46,6 +67,7 @@ interface AppConfig {
   jwt: JWTConfig;
   redis: RedisConfig;
   solana: SolanaConfig;
+  encryption: EncryptionConfig;
 }
 
 // 配置对象
@@ -74,7 +96,11 @@ const config: AppConfig = {
   solana: {
     rpcEndpoint: process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com',
   },
+  encryption: {
+    enabled: process.env.ENABLE_ENCRYPTION === 'true' || nodeEnv === 'production',
+    secret: process.env.ENCRYPTION_SECRET || 'coinfun-security-key-2024-v1',
+  },
 };
 
 export default config;
-export type { DatabaseConfig, ServerConfig, JWTConfig, RedisConfig, SolanaConfig, AppConfig };
+export type { DatabaseConfig, ServerConfig, JWTConfig, RedisConfig, SolanaConfig, EncryptionConfig, AppConfig };

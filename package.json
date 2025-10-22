@@ -44,9 +44,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "nodemon --exec 'node --loader ts-node/esm' src/server.ts",
-    "migrate": "node --loader ts-node/esm src/migrations/run-migrations.ts",
+    "start": "NODE_ENV=production node dist/server.js",
+    "dev": "NODE_ENV=development nodemon --exec 'node --loader ts-node/esm' src/server.ts",
+    "migrate": "NODE_ENV=development node --loader ts-node/esm src/migrations/run-migrations.ts",
     "setup": "node setup.js",
     "prepublishOnly": "npm run build"
   },

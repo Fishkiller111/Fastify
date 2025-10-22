@@ -2,6 +2,7 @@ import fastify from 'fastify';
 import config from './config/index.js';
 import jwtPlugin from './plugins/jwt.js';
 import authPlugin from './plugins/auth.js';
+import encryptionPlugin from './plugins/encryption.js';
 import registerRoutes from './routes/index.js';
 import { startAutoSettleJob } from './modules/meme/auto-settle.js';
 
@@ -66,6 +67,9 @@ await app.register(jwtPlugin);
 
 // 注册认证插件
 await app.register(authPlugin);
+
+// 注册加密插件 (必须在路由注册之前)
+await app.register(encryptionPlugin);
 
 // 注册路由
 await app.register(registerRoutes);
