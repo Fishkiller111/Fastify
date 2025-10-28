@@ -313,10 +313,10 @@ async function memeRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // 获取用户投注历史
+  // 获取用户投注历史（包含退款记录）
   fastify.get('/bets', {
     schema: {
-      description: '获取用户投注历史',
+      description: '获取用户投注历史及关联的退款记录',
       tags: ['Meme合约'],
       security: [{ bearerAuth: [] }],
       querystring: {
@@ -343,6 +343,25 @@ async function memeRoutes(fastify: FastifyInstance) {
               potential_payout: { type: 'string', nullable: true },
               actual_payout: { type: 'string', nullable: true },
               status: { type: 'string' },
+              refund_amount: { type: 'string', description: '总退款金额' },
+              net_bet_amount: { type: 'string', description: '净投注金额 = bet_amount - refund_amount' },
+              refunds: {
+                type: 'array',
+                description: '关联的退款记录',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    refund_type: { type: 'string' },
+                    refund_reason: { type: 'string', nullable: true },
+                    refund_amount: { type: 'string' },
+                    status: { type: 'string' },
+                    created_at: { type: 'string' },
+                  },
+                },
+              },
+              event_type: { type: 'string', description: '事件类型 (pumpfun, bonk, Mainstream)' },
+              event_status: { type: 'string', description: '事件状态' },
               created_at: { type: 'string' },
             },
           },

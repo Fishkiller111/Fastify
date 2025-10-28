@@ -702,9 +702,9 @@ export async function getEventById(eventId: number): Promise<MemeEvent | null> {
 }
 
 /**
- * 获取用户投注历史
+ * 获取用户投注历史（包含退款记录和事件详情）
  */
-export async function getUserBets(query: GetUserBetsQuery): Promise<MemeBet[]> {
+export async function getUserBets(query: GetUserBetsQuery): Promise<any[]> {
   const { user_id, event_id, status, limit = 20, offset = 0 } = query;
 
   const conditions = [];
@@ -712,31 +712,71 @@ export async function getUserBets(query: GetUserBetsQuery): Promise<MemeBet[]> {
   let paramCount = 1;
 
   if (user_id) {
-    conditions.push(`user_id = $${paramCount++}`);
+    conditions.push(`mb.user_id = $${paramCount++}`);
     params.push(user_id);
   }
 
   if (event_id) {
-    conditions.push(`event_id = $${paramCount++}`);
+    conditions.push(`mb.event_id = $${paramCount++}`);
     params.push(event_id);
   }
 
   if (status) {
-    conditions.push(`status = $${paramCount++}`);
+    conditions.push(`mb.status = $${paramCount++}`);
     params.push(status);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT * FROM meme_bets
+    `SELECT 
+       mb.id,
+       mb.event_id,
+       mb.user_id,
+       mb.bet_type,
+       mb.bet_amount,
+       mb.odds_at_bet,
+       mb.potential_payout,
+       mb.actual_payout,
+       mb.status,
+       mb.created_at,
+       COALESCE(SUM(rr.refund_amount), 0) as refund_amount,
+       (mb.bet_amount - COALESCE(SUM(rr.refund_amount), 0)) as net_bet_amount,
+       me.type as event_type,
+       me.contract_address,
+       me.creator_side,
+       me.status as event_status,
+       me.deadline,
+       me.settled_at
+     FROM meme_bets mb
+     LEFT JOIN refund_records rr ON mb.id = rr.bet_id AND rr.status = 'completed'
+     LEFT JOIN meme_events me ON mb.event_id = me.id
      ${whereClause}
-     ORDER BY created_at DESC
+     GROUP BY mb.id, me.id
+     ORDER BY mb.created_at DESC
      LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
     [...params, limit, offset]
   );
 
-  return result.rows;
+  // 为每条投注记录查询关联的详细退款记录
+  const betsWithRefunds = await Promise.all(
+    result.rows.map(async (bet) => {
+      const refundsResult = await pool.query(
+        `SELECT id, refund_type, refund_reason, refund_amount, status, created_at 
+         FROM refund_records 
+         WHERE bet_id = $1 AND status = 'completed'
+         ORDER BY created_at DESC`,
+        [bet.id]
+      );
+
+      return {
+        ...bet,
+        refunds: refundsResult.rows,
+      };
+    })
+  );
+
+  return betsWithRefunds;
 }
 
 /**
