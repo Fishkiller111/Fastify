@@ -585,7 +585,7 @@ class UserService {
     const client = await pool.connect();
 
     try {
-      // 首先获取下注记录和汇总的退款金额
+      // 获取下注记录（直接使用 final_amount 字段）
       const betsResult = await client.query(
         `SELECT
           mb.*,
@@ -600,88 +600,47 @@ class UserService {
           bc.name as big_coin_name,
           bc.icon_url as big_coin_icon_url,
           me.future_price,
-          me.current_price,
-          COALESCE(SUM(rr.refund_amount), 0) as total_refund_amount
+          me.current_price
          FROM meme_bets mb
          INNER JOIN meme_events me ON mb.event_id = me.id
          LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
-         LEFT JOIN refund_records rr ON mb.id = rr.bet_id AND rr.status = 'completed'
          WHERE mb.user_id = $1
-         GROUP BY mb.id, me.id, bc.id
          ORDER BY mb.created_at DESC
          LIMIT $2 OFFSET $3`,
         [userId, limit, offset]
       );
 
-      // 为每个下注记录获取详细的退款记录
-      const betsWithRefunds = await Promise.all(
-        betsResult.rows.map(async (row) => {
-          const betAmount = parseFloat(row.bet_amount);
-          const refundAmount = parseFloat(row.total_refund_amount);
-          const netBetAmount = betAmount - refundAmount;
+      // 映射返回数据（直接使用 final_amount）
+      const bets = betsResult.rows.map(row => ({
+        id: row.id,
+        event_id: row.event_id,
+        user_id: row.user_id,
+        bet_type: row.bet_type,
+        bet_amount: row.bet_amount,
+        final_amount: row.final_amount,
+        odds_at_bet: row.odds_at_bet,
+        potential_payout: row.potential_payout,
+        actual_payout: row.actual_payout,
+        status: row.status,
+        created_at: row.created_at,
+        event: {
+          id: row.event_id,
+          type: row.type,
+          status: row.event_status,
+          contract_address: row.contract_address,
+          deadline: row.deadline,
+          settled_at: row.settled_at,
+          token_name: row.token_name,
+          big_coin_id: row.big_coin_id,
+          big_coin_symbol: row.big_coin_symbol,
+          big_coin_name: row.big_coin_name,
+          big_coin_icon_url: row.big_coin_icon_url,
+          future_price: row.future_price,
+          current_price: row.current_price,
+        }
+      }));
 
-          // 获取该下注对应的所有退款记录
-          const refundsResult = await client.query(
-            `SELECT
-              id,
-              refund_type,
-              refund_reason,
-              refund_amount,
-              original_bet_amount,
-              status,
-              created_at,
-              updated_at
-             FROM refund_records
-             WHERE bet_id = $1 AND status = 'completed'
-             ORDER BY created_at DESC`,
-            [row.id]
-          );
-
-          const refunds = refundsResult.rows.map(refund => ({
-            id: refund.id,
-            refund_type: refund.refund_type,
-            refund_reason: refund.refund_reason,
-            refund_amount: refund.refund_amount,
-            original_bet_amount: refund.original_bet_amount,
-            status: refund.status,
-            created_at: refund.created_at,
-            updated_at: refund.updated_at,
-          }));
-
-          return {
-            id: row.id,
-            event_id: row.event_id,
-            user_id: row.user_id,
-            bet_type: row.bet_type,
-            bet_amount: row.bet_amount,
-            refund_amount: row.total_refund_amount,
-            net_bet_amount: netBetAmount.toString(),
-            odds_at_bet: row.odds_at_bet,
-            potential_payout: row.potential_payout,
-            actual_payout: row.actual_payout,
-            status: row.status,
-            created_at: row.created_at,
-            refunds: refunds,
-            event: {
-              id: row.event_id,
-              type: row.type,
-              status: row.event_status,
-              contract_address: row.contract_address,
-              deadline: row.deadline,
-              settled_at: row.settled_at,
-              token_name: row.token_name,
-              big_coin_id: row.big_coin_id,
-              big_coin_symbol: row.big_coin_symbol,
-              big_coin_name: row.big_coin_name,
-              big_coin_icon_url: row.big_coin_icon_url,
-              future_price: row.future_price,
-              current_price: row.current_price,
-            }
-          };
-        })
-      );
-
-      return betsWithRefunds;
+      return bets;
     } finally {
       client.release();
     }
@@ -725,21 +684,15 @@ class UserService {
 
       const result = await client.query(
         `SELECT
-          COUNT(DISTINCT mb.id) as total_bets,
-          COALESCE(SUM(mb.bet_amount), 0) as total_bet_amount,
-          COALESCE(SUM(CASE WHEN mb.status = 'pending' THEN mb.bet_amount - COALESCE(rr.refund_sum, 0) ELSE 0 END), 0) as active_bet_amount,
-          COALESCE(SUM(CASE WHEN mb.status = 'won' THEN (mb.actual_payout - mb.bet_amount) ELSE 0 END), 0) as profit,
-          COALESCE(SUM(CASE WHEN mb.status = 'lost' THEN mb.bet_amount ELSE 0 END), 0) as loss,
-          COUNT(CASE WHEN mb.status = 'won' THEN 1 END) as won_count,
-          COUNT(CASE WHEN mb.status IN ('won', 'lost') THEN 1 END) as settled_count
-         FROM meme_bets mb
-         LEFT JOIN (
-           SELECT bet_id, SUM(refund_amount) as refund_sum
-           FROM refund_records
-           WHERE status = 'completed'
-           GROUP BY bet_id
-         ) rr ON mb.id = rr.bet_id
-         WHERE mb.user_id = $1 ${timeFilter}`,
+          COUNT(*) as total_bets,
+          COALESCE(SUM(final_amount), 0) as total_bet_amount,
+          COALESCE(SUM(CASE WHEN status = 'pending' THEN final_amount ELSE 0 END), 0) as active_bet_amount,
+          COALESCE(SUM(CASE WHEN status = 'won' THEN (actual_payout - final_amount) ELSE 0 END), 0) as profit,
+          COALESCE(SUM(CASE WHEN status = 'lost' THEN final_amount ELSE 0 END), 0) as loss,
+          COUNT(CASE WHEN status = 'won' THEN 1 END) as won_count,
+          COUNT(CASE WHEN status IN ('won', 'lost') THEN 1 END) as settled_count
+         FROM meme_bets
+         WHERE user_id = $1 ${timeFilter}`,
         params
       );
 

@@ -103,30 +103,12 @@ async function userRoutes(fastify: FastifyInstance) {
               user_id: { type: 'number' },
               bet_type: { type: 'string' },
               bet_amount: { type: 'string', description: '原始投注金额' },
-              refund_amount: { type: 'string', description: '总退款金额' },
-              net_bet_amount: { type: 'string', description: '净投注金额 (bet_amount - refund_amount)' },
+              final_amount: { type: 'string', description: '最终有效注金（扣除退款后）' },
               odds_at_bet: { type: 'string' },
               potential_payout: { type: 'string', nullable: true },
               actual_payout: { type: 'string', nullable: true },
               status: { type: 'string' },
               created_at: { type: 'string' },
-              refunds: {
-                type: 'array',
-                description: '详细的退款记录列表',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'number', description: '退款记录ID' },
-                    refund_type: { type: 'string', description: '退款类型: excess_matching|event_cancelled|manual|other' },
-                    refund_reason: { type: 'string', description: '退款原因说明' },
-                    refund_amount: { type: 'string', description: '本次退款金额' },
-                    original_bet_amount: { type: 'string', nullable: true, description: '原始投注金额' },
-                    status: { type: 'string', description: '退款状态: pending|completed|failed' },
-                    created_at: { type: 'string', description: '退款创建时间' },
-                    updated_at: { type: 'string', description: '退款更新时间' },
-                  },
-                },
-              },
               event: {
                 type: 'object',
                 properties: {
