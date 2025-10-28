@@ -131,6 +131,12 @@ async function activateEventAfterMatching(
         [refundAmount, bet.user_id]
       );
 
+      // 更新投注记录的 final_amount（扣除退款金额）
+      await client.query(
+        'UPDATE meme_bets SET final_amount = final_amount - $1 WHERE id = $2',
+        [refundAmount, bet.id]
+      );
+
       // 记录退款到退款记录表（NOT 改变投注状态）
       // 投注状态保持原样，由 refund_records 表记录退款明细
       await client.query(
@@ -187,6 +193,12 @@ async function activateEventAfterMatching(
     if (creatorBetResult.rows.length > 0) {
       const creatorBetId = creatorBetResult.rows[0].id;
       const creatorBetAmount = creatorPool;
+
+      // 更新创建者投注记录的 final_amount（扣除退款金额）
+      await client.query(
+        'UPDATE meme_bets SET final_amount = final_amount - $1 WHERE id = $2',
+        [creatorExcess, creatorBetId]
+      );
 
       // 记录创建者的退款（NOT 改变投注状态）
       // 投注状态保持原样，由 refund_records 表记录退款明细
@@ -455,8 +467,8 @@ export async function createMainstreamEvent(
 
     const betResult = await client.query(
       `INSERT INTO meme_bets
-       (event_id, user_id, bet_type, bet_amount, odds_at_bet, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')
+       (event_id, user_id, bet_type, bet_amount, odds_at_bet, final_amount, status)
+       VALUES ($1, $2, $3, $4, $5, $4, 'pending')
        RETURNING id`,
       [event.id, creatorId, data.creator_side, data.initial_pool_amount, oddsAtBet]
     );
@@ -715,6 +727,19 @@ export async function placeMainstreamBet(
       [odds.yes_odds, odds.no_odds, data.event_id]
     );
 
+    // 记录投注（先创建投注记录）
+    const oddsAtBet = data.bet_type === 'yes' ? odds.yes_odds : odds.no_odds;
+    const betResult = await client.query(
+      `INSERT INTO meme_bets
+       (event_id, user_id, bet_type, bet_amount, odds_at_bet, final_amount, status)
+       VALUES ($1, $2, $3, $4, $5, $4, 'pending')
+       RETURNING *`,
+      [data.event_id, userId, data.bet_type, data.bet_amount, oddsAtBet]
+    );
+
+    const betRow = betResult.rows[0];
+    const betId = betRow.id;
+
     // 如果是pending_match状态，检查是否满足matching_slide条件，触发激活
     if (event.status === 'pending_match') {
       // 获取matching_slide和initial_pool_amount用于计算
@@ -739,19 +764,6 @@ export async function placeMainstreamBet(
         );
       }
     }
-
-    // 记录投注
-    const oddsAtBet = data.bet_type === 'yes' ? odds.yes_odds : odds.no_odds;
-    const betResult = await client.query(
-      `INSERT INTO meme_bets
-       (event_id, user_id, bet_type, bet_amount, odds_at_bet, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')
-       RETURNING *`,
-      [data.event_id, userId, data.bet_type, data.bet_amount, oddsAtBet]
-    );
-
-    const betRow = betResult.rows[0];
-    const betId = betRow.id;
 
     await client.query('COMMIT');
 
@@ -917,15 +929,10 @@ export async function settleMainstreamEvent(eventId: number): Promise<void> {
       [currentPrice, eventId]
     );
 
-    // 获取所有获胜的投注（包括计算退款后的净投注金额）
+    // 获取所有获胜的投注
     const winningBets = await client.query(
-      `SELECT 
-        mb.*,
-        COALESCE(SUM(rr.refund_amount), 0) as total_refund
-       FROM meme_bets mb
-       LEFT JOIN refund_records rr ON mb.id = rr.bet_id AND rr.status = 'completed'
-       WHERE mb.event_id = $1 AND mb.bet_type = $2 AND mb.status = $3
-       GROUP BY mb.id`,
+      `SELECT * FROM meme_bets
+       WHERE event_id = $1 AND bet_type = $2 AND status = $3`,
       [eventId, winnerSide, 'pending']
     );
 
@@ -934,14 +941,12 @@ export async function settleMainstreamEvent(eventId: number): Promise<void> {
 
     // 分配奖金给获胜者
     for (const bet of winningBets.rows) {
-      const betAmount = parseFloat(bet.bet_amount);
-      const refundAmount = parseFloat(bet.total_refund || 0);
-      const netBetAmount = betAmount - refundAmount;  // 净投注金额（已扣除退款）
+      const finalAmount = parseFloat(bet.final_amount);  // 使用最终注金（已扣除退款）
       const oddsAtBet = parseFloat(bet.odds_at_bet);
 
-      // 赔付 = 净投注金额 × (1 + 赔率/100)
-      // 即: 本金 + 利润 = 净投注金额 × (1 + 赔率/100)
-      const payout = (netBetAmount * (1 + oddsAtBet / 100)).toFixed(2);
+      // 赔付 = 最终注金 × (1 + 赔率/100)
+      // 即: 本金 + 利润 = final_amount × (1 + 赔率/100)
+      const payout = (finalAmount * (1 + oddsAtBet / 100)).toFixed(2);
 
       // 更新投注状态和实际奖金
       await client.query(
@@ -955,12 +960,8 @@ export async function settleMainstreamEvent(eventId: number): Promise<void> {
         [payout, bet.user_id]
       );
 
-      // 详细的结算日志（包括退款信息）
-      if (refundAmount > 0) {
-        console.log(`   用户 ${bet.user_id}: 原始投注 $${betAmount}, 退款 $${refundAmount}, 净投注 $${netBetAmount}, 赔付 $${payout}`);
-      } else {
-        console.log(`   用户 ${bet.user_id}: 投注 $${betAmount}, 赔付 $${payout}`);
-      }
+      // 详细的结算日志
+      console.log(`   用户 ${bet.user_id}: 最终注金 $${finalAmount}, 赔率 ${oddsAtBet}%, 赔付 $${payout}`);
 
       // 结算对应的佣金
       try {
