@@ -59,8 +59,8 @@ async function up() {
         ('ETH', 'Ethereum', '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', 'BSC', 18),
         ('SOL', 'Solana', '0x570A5D26f7765Ecb712C0924E4De545B89fD43dF', 'BSC', 18),
         ('BNB', 'Binance Coin', '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', 'BSC', 18),
-        ('USDT', 'Tether USD', '0x55d398326f99059fF775485246999027B3197955', 'BSC', 18),
-        ('USDC', 'USD Coin', '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', 'BSC', 18)
+        ('XRP', 'Ripple', '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE', 'BSC', 18),
+        ('DOGE', 'Dogecoin', '0xbA2aE424d960c26247Dd6c32edC70B295c744C43', 'BSC', 18)
       ON CONFLICT (symbol) DO NOTHING;
     `);
 

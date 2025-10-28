@@ -18,12 +18,15 @@ export interface MemeEvent {
   contract_address?: string;
   creator_side: BetType;
   initial_pool_amount: string;
+  matching_slide: number;          // 匹配滑动值 1-100 (%)
+  pending_match_timeout: number;   // 待匹配状态超时时间(秒)，默认3600(1小时)，范围1-604800(7天)
   yes_pool: string;
   no_pool: string;
   yes_odds: string;
   no_odds: string;
   total_yes_bets: number;
   total_no_bets: number;
+  matched_amount: string;          // 待匹配状态下反方的累计投注金额
   is_launched: boolean | null;
   status: MemeEventStatus;
   deadline: Date;
@@ -54,7 +57,9 @@ export interface CreateMemeEventRequest {
   contract_address: string;
   creator_side: BetType;
   initial_pool_amount: number;
-  duration: string; // 例如: "10minutes", "30minutes", "1days", 或自定义小时数 "5hours"
+  matching_slide: number;           // 匹配滑动值 1-100 (%)，创建者保留的百分比
+  pending_match_timeout?: number;   // 待匹配状态超时时间(秒)，可选，默认3600(1小时)，范围1-604800(7天)
+  duration: string;                 // 例如: "10minutes", "30minutes", "1days", 或自定义小时数 "5hours"
 }
 
 // 投注请求接口

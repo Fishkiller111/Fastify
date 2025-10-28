@@ -23,6 +23,7 @@ export interface CreateMainstreamEventRequest {
   initial_pool_amount: number;
   duration: string; // 例如: "10minutes", "30minutes", "1days"
   future_price: number; // 预测的未来价格
+  pending_match_timeout?: number; // 待匹配状态超时时间(秒)，可选，默认3600(1小时)，范围1-604800(7天)
 }
 
 // 主流币事件响应
@@ -47,6 +48,7 @@ export interface MainstreamEventResponse {
   total_no_bets: number;
   status: 'pending_match' | 'active' | 'settled' | 'cancelled';
   deadline: Date;
+  pending_match_timeout: number; // 待匹配状态超时时间(秒)
   created_at: Date;
   settled_at?: Date;
   future_price?: string;

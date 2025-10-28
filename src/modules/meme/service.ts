@@ -89,12 +89,18 @@ export async function createMemeEvent(
     // 计算deadline
     const deadline = calculateDeadline(data.duration);
 
+    // 验证和设置 pending_match_timeout（默认3600秒=1小时）
+    let pendingMatchTimeout = data.pending_match_timeout || 3600;
+    if (pendingMatchTimeout < 1 || pendingMatchTimeout > 604800) {
+      throw new Error('pending_match_timeout 必须在1-604800秒之间');
+    }
+
     // 创建事件(待匹配状态)
     const result = await client.query(
       `INSERT INTO meme_events
        (creator_id, type, contract_address, creator_side, initial_pool_amount,
-        yes_pool, no_pool, status, deadline)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending_match', $8)
+        matching_slide, pending_match_timeout, yes_pool, no_pool, matched_amount, status, deadline)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_match', $11)
        RETURNING *`,
       [
         creatorId,
@@ -102,8 +108,11 @@ export async function createMemeEvent(
         data.contract_address,
         data.creator_side,
         data.initial_pool_amount,
+        data.matching_slide,
+        pendingMatchTimeout,
         yesPool,
         noPool,
+        0,  // matched_amount初始值为0
         deadline,
       ]
     );
@@ -122,6 +131,152 @@ export async function createMemeEvent(
   } finally {
     client.release();
   }
+}
+
+/**
+ * 处理待匹配状态下的投注逻辑
+ * 记录反方累计投注金额，用于判断是否满足匹配条件
+ */
+async function handlePendingMatchBet(
+  client: any,
+  event: any,
+  userId: number,
+  betType: string,
+  betAmount: number,
+  eventId: number
+): Promise<void> {
+  // 待匹配状态下，记录反方的累计投注金额
+  const counterSide = event.creator_side === 'yes' ? 'no' : 'yes';
+  
+  if (betType === counterSide) {
+    // 更新matched_amount
+    await client.query(
+      `UPDATE meme_events
+       SET matched_amount = matched_amount + $1
+       WHERE id = $2`,
+      [betAmount, eventId]
+    );
+  }
+}
+
+/**
+ * 激活事件并处理退款
+ * 当反方投注达到required_amount时触发
+ * 如果反方超额，按比例返还超额部分
+ */
+async function activateEventAfterMatching(
+  client: any,
+  eventId: number,
+  creatorSide: string,
+  requiredAmount: number,
+  initialPoolAmount: number
+): Promise<void> {
+  // 获取当前事件状态
+  const eventResult = await client.query(
+    `SELECT yes_pool, no_pool, creator_id, matched_amount FROM meme_events WHERE id = $1`,
+    [eventId]
+  );
+
+  if (eventResult.rows.length === 0) {
+    return;
+  }
+
+  const event = eventResult.rows[0];
+  const creatorId = event.creator_id;
+  const currentYesPool = parseFloat(event.yes_pool);
+  const currentNoPool = parseFloat(event.no_pool);
+  const matchedAmount = parseFloat(event.matched_amount);
+
+  // 确定创建者方和反方
+  const creatorPool = creatorSide === 'yes' ? currentYesPool : currentNoPool;
+  const counterPool = creatorSide === 'yes' ? currentNoPool : currentYesPool;
+
+  console.log(`
+  ✅ 匹配成功！即将激活事件 ${eventId}
+  创建者方: ${creatorSide}, 初始金额: ${initialPoolAmount}
+  反方累计: ${counterPool} / 需求: ${requiredAmount}
+  `);
+
+  // 处理超额退款
+  const excess = counterPool - requiredAmount;
+  
+  if (excess > 0) {
+    console.log(`💰 反方超额: ${excess}, 需要进行退款处理`);
+    
+    // 获取反方最近的投注者，按比例退款
+    const counterSide = creatorSide === 'yes' ? 'no' : 'yes';
+    const betsResult = await client.query(
+      `SELECT id, user_id, bet_amount FROM meme_bets 
+       WHERE event_id = $1 AND bet_type = $2 
+       ORDER BY created_at DESC`,
+      [eventId, counterSide]
+    );
+
+    let remainingExcess = excess;
+    const bets = betsResult.rows;
+
+    // 从最后一个投注者开始往前退款
+    for (let i = bets.length - 1; i >= 0 && remainingExcess > 0; i--) {
+      const bet = bets[i];
+      const betAmount = parseFloat(bet.bet_amount);
+      const refundAmount = Math.min(betAmount, remainingExcess);
+
+      // 退款给用户
+      await client.query(
+        'UPDATE users SET balance = balance + $1 WHERE id = $2',
+        [refundAmount, bet.user_id]
+      );
+
+      console.log(`💸 用户 ${bet.user_id} 获得退款: ${refundAmount}`);
+      remainingExcess -= refundAmount;
+    }
+
+    // 调整反方池子为required_amount
+    if (creatorSide === 'yes') {
+      await client.query(
+        `UPDATE meme_events SET no_pool = $1 WHERE id = $2`,
+        [requiredAmount, eventId]
+      );
+    } else {
+      await client.query(
+        `UPDATE meme_events SET yes_pool = $1 WHERE id = $2`,
+        [requiredAmount, eventId]
+      );
+    }
+  }
+
+  // 调整创建者方的池子为required_amount（保持平衡）
+  const creatorExcess = creatorPool - requiredAmount;
+  if (creatorExcess > 0) {
+    console.log(`💰 创建者超额: ${creatorExcess}, 退款给创建者`);
+    
+    // 退款给创建者
+    await client.query(
+      'UPDATE users SET balance = balance + $1 WHERE id = $2',
+      [creatorExcess, creatorId]
+    );
+
+    // 调整创建者方的池子
+    if (creatorSide === 'yes') {
+      await client.query(
+        `UPDATE meme_events SET yes_pool = $1 WHERE id = $2`,
+        [requiredAmount, eventId]
+      );
+    } else {
+      await client.query(
+        `UPDATE meme_events SET no_pool = $1 WHERE id = $2`,
+        [requiredAmount, eventId]
+      );
+    }
+  }
+
+  // 更新事件状态为active
+  await client.query(
+    `UPDATE meme_events
+     SET status = 'active', launch_time = CURRENT_TIMESTAMP
+     WHERE id = $1`,
+    [eventId]
+  );
 }
 
 /**
@@ -144,7 +299,13 @@ function calculateOdds(yesPool: number, noPool: number) {
 }
 
 /**
- * 用户下注
+ * 用户下注 - 支持匹配滑动值机制
+ * 
+ * 待匹配状态(pending_match)逻辑：
+ * 1. 只能下注与创建者相反的方向
+ * 2. 反方投注累计需达到：initial_pool_amount × matching_slide% 才能成功开盘
+ * 3. 若达到，多余部分返还给反方，创建者方也按比例调整
+ * 4. 进入active状态，双方池子相等（公平开盘）
  */
 export async function placeBet(
   userId: number,
@@ -194,6 +355,18 @@ export async function placeBet(
       [data.bet_amount, userId]
     );
 
+    // 处理待匹配状态的特殊逻辑
+    if (event.status === 'pending_match') {
+      await handlePendingMatchBet(
+        client,
+        event,
+        userId,
+        data.bet_type,
+        data.bet_amount,
+        data.event_id
+      );
+    }
+
     // 更新事件池子
     const poolField = data.bet_type === 'yes' ? 'yes_pool' : 'no_pool';
     const counterField = data.bet_type === 'yes' ? 'total_yes_bets' : 'total_no_bets';
@@ -208,22 +381,34 @@ export async function placeBet(
 
     // 获取更新后的事件信息
     const updatedEvent = await client.query(
-      'SELECT yes_pool, no_pool, status, creator_side FROM meme_events WHERE id = $1',
+      'SELECT yes_pool, no_pool, status, creator_side, matching_slide, initial_pool_amount FROM meme_events WHERE id = $1',
       [data.event_id]
     );
 
-    const { yes_pool, no_pool, status, creator_side } = updatedEvent.rows[0];
+    const {
+      yes_pool,
+      no_pool,
+      status,
+      creator_side,
+      matching_slide,
+      initial_pool_amount
+    } = updatedEvent.rows[0];
+
     const odds = calculateOdds(parseFloat(yes_pool), parseFloat(no_pool));
 
-    // 如果是待匹配状态且对方池子已有资金,则激活事件
+    // 检查是否满足匹配条件，触发激活
     if (status === 'pending_match') {
-      const oppositePool = creator_side === 'yes' ? parseFloat(no_pool) : parseFloat(yes_pool);
-      if (oppositePool > 0) {
-        await client.query(
-          `UPDATE meme_events
-           SET status = 'active', launch_time = CURRENT_TIMESTAMP
-           WHERE id = $1`,
-          [data.event_id]
+      const counterPool = creator_side === 'yes' ? parseFloat(no_pool) : parseFloat(yes_pool);
+      const requiredAmount = parseFloat(initial_pool_amount) * (1 - matching_slide / 100);
+
+      if (counterPool >= requiredAmount) {
+        // 满足匹配条件，触发开盘
+        await activateEventAfterMatching(
+          client,
+          data.event_id,
+          creator_side,
+          requiredAmount,
+          parseFloat(initial_pool_amount)
         );
       }
     }

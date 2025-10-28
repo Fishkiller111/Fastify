@@ -126,6 +126,12 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             examples: ['10minutes', '30minutes', '5hours', '1days', '72h', '45m', '2d']
           },
           future_price: { type: 'number', description: '预测的未来价格（deadline到期前币价是否能达到此价格）' },
+          pending_match_timeout: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 604800,
+            description: '待匹配状态超时时间(秒)，可选，默认3600(1小时)，范围1-604800(7天)'
+          },
         },
       },
       response: {
@@ -155,6 +161,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             total_no_bets: { type: 'number' },
             status: { type: 'string' },
             deadline: { type: 'string' },
+            pending_match_timeout: { type: 'number' },
             created_at: { type: 'string' },
             future_price: { type: 'string' },
           },

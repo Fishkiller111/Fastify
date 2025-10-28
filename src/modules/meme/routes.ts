@@ -23,12 +23,24 @@ async function memeRoutes(fastify: FastifyInstance) {
       security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
-        required: ['type', 'contract_address', 'creator_side', 'initial_pool_amount', 'duration'],
+        required: ['type', 'contract_address', 'creator_side', 'initial_pool_amount', 'matching_slide', 'duration'],
         properties: {
           type: { type: 'string', enum: ['pumpfun', 'bonk'], description: '合约类型' },
           contract_address: { type: 'string', description: '目标合约地址' },
           creator_side: { type: 'string', enum: ['yes', 'no'], description: '创建者选择的方向' },
           initial_pool_amount: { type: 'number', description: '初始资金池金额' },
+          matching_slide: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
+            description: '匹配滑动值(%)：创建者愿意保留的百分比，范围1-100'
+          },
+          pending_match_timeout: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 604800,
+            description: '待匹配状态超时时间(秒)，可选，默认3600(1小时)，范围1-604800(7天)'
+          },
           duration: {
             type: 'string',
             description: '持续时间,支持格式: "10minutes", "30minutes", "5hours", "1days", "72h", "45m", "2d"',
@@ -46,12 +58,15 @@ async function memeRoutes(fastify: FastifyInstance) {
             contract_address: { type: 'string' },
             creator_side: { type: 'string' },
             initial_pool_amount: { type: 'string' },
+            matching_slide: { type: 'number' },
+            pending_match_timeout: { type: 'number', description: '待匹配状态超时时间(秒)' },
             yes_pool: { type: 'string' },
             no_pool: { type: 'string' },
             yes_odds: { type: 'string' },
             no_odds: { type: 'string' },
             total_yes_bets: { type: 'number' },
             total_no_bets: { type: 'number' },
+            matched_amount: { type: 'string' },
             status: { type: 'string' },
             deadline: { type: 'string' },
             created_at: { type: 'string' },
@@ -64,6 +79,19 @@ async function memeRoutes(fastify: FastifyInstance) {
     try {
       const userId = (request as any).user.userId;
       const body = request.body as CreateMemeEventRequest;
+      
+      // 验证matching_slide
+      if (!body.matching_slide || body.matching_slide < 1 || body.matching_slide > 100) {
+        return reply.code(400).send({ error: '匹配滑动值必须在1-100之间' });
+      }
+      
+      // 验证pending_match_timeout（可选，如果提供则验证范围）
+      if (body.pending_match_timeout !== undefined) {
+        if (body.pending_match_timeout < 1 || body.pending_match_timeout > 604800) {
+          return reply.code(400).send({ error: '待匹配超时时间必须在1-604800秒之间' });
+        }
+      }
+      
       const event = await MemeService.createMemeEvent(userId, body);
       reply.code(201).send(event);
     } catch (error: any) {

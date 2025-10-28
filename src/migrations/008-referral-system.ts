@@ -35,10 +35,10 @@ export async function up() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS commission_tiers (
         id SERIAL PRIMARY KEY,
-        tier_name VARCHAR(50) NOT NULL,
+        tier_name VARCHAR(50) NOT NULL UNIQUE,
         volume DECIMAL(20, 2) NOT NULL,
         commission_rate DECIMAL(5, 4) NOT NULL,
-        tier_order INTEGER NOT NULL,
+        tier_order INTEGER NOT NULL UNIQUE,
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -78,7 +78,8 @@ export async function up() {
       CREATE INDEX IF NOT EXISTS idx_commission_records_status ON commission_records(status);
     `);
 
-    // 插入默认反佣等级
+    // 插入默认反佣等级 - 使用 DO NOTHING 避免重复插入
+    // 如果表已存在且有数据，则跳过插入
     await client.query(`
       INSERT INTO commission_tiers (tier_name, volume, commission_rate, tier_order)
       VALUES

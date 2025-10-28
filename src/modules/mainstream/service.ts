@@ -199,6 +199,12 @@ export async function createMainstreamEvent(
       [data.initial_pool_amount, creatorId]
     );
 
+    // 验证并设置待匹配超时时间
+    let pendingMatchTimeout = data.pending_match_timeout || 3600;
+    if (pendingMatchTimeout < 1 || pendingMatchTimeout > 604800) {
+      throw new Error('pending_match_timeout 必须在1-604800秒之间');
+    }
+
     // 根据创建者选择的方向分配初始资金池
     const yesPool = data.creator_side === 'yes' ? data.initial_pool_amount : 0;
     const noPool = data.creator_side === 'no' ? data.initial_pool_amount : 0;
@@ -210,8 +216,8 @@ export async function createMainstreamEvent(
     const result = await client.query(
       `INSERT INTO meme_events
        (creator_id, type, contract_address, big_coin_id, creator_side, initial_pool_amount,
-        yes_pool, no_pool, status, deadline, future_price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_match', $9, $10)
+        yes_pool, no_pool, status, deadline, future_price, pending_match_timeout)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_match', $9, $10, $11)
        RETURNING *`,
       [
         creatorId,
@@ -224,6 +230,7 @@ export async function createMainstreamEvent(
         noPool,
         deadline,
         data.future_price,
+        pendingMatchTimeout,
       ]
     );
 
@@ -279,6 +286,7 @@ export async function createMainstreamEvent(
       total_no_bets: event.total_no_bets,
       status: event.status,
       deadline: event.deadline,
+      pending_match_timeout: event.pending_match_timeout,
       created_at: event.created_at,
       settled_at: event.settled_at,
       future_price: event.future_price,
@@ -334,6 +342,7 @@ export async function getMainstreamEvents(
     total_no_bets: row.total_no_bets,
     status: row.status,
     deadline: row.deadline,
+    pending_match_timeout: row.pending_match_timeout,
     created_at: row.created_at,
     settled_at: row.settled_at,
     future_price: row.future_price,
@@ -383,6 +392,7 @@ export async function getMainstreamEventById(eventId: number): Promise<Mainstrea
     total_no_bets: row.total_no_bets,
     status: row.status,
     deadline: row.deadline,
+    pending_match_timeout: row.pending_match_timeout,
     created_at: row.created_at,
     settled_at: row.settled_at,
     future_price: row.future_price,
