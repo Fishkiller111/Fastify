@@ -539,20 +539,28 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
       [isLaunched, data.event_id]
     );
 
-    // 获取所有获胜的投注
+    // 获取所有获胜的投注（包括计算退款后的净投注金额）
     const winningBets = await client.query(
-      'SELECT * FROM meme_bets WHERE event_id = $1 AND bet_type = $2 AND status = $3',
+      `SELECT 
+        mb.*,
+        COALESCE(SUM(rr.refund_amount), 0) as total_refund
+       FROM meme_bets mb
+       LEFT JOIN refund_records rr ON mb.id = rr.bet_id AND rr.status = 'completed'
+       WHERE mb.event_id = $1 AND mb.bet_type = $2 AND mb.status = $3
+       GROUP BY mb.id`,
       [data.event_id, winnerSide, 'pending']
     );
 
     // 分配奖金给获胜者
     for (const bet of winningBets.rows) {
       const betAmount = parseFloat(bet.bet_amount);
+      const refundAmount = parseFloat(bet.total_refund || 0);
+      const netBetAmount = betAmount - refundAmount;  // 净投注金额（已扣除退款）
       const oddsAtBet = parseFloat(bet.odds_at_bet);
 
-      // 赔付 = 本金 × (1 + 赔率/100)
-      // 例如: 下注100, 赔率50% → 赔付 = 100 × (1 + 50/100) = 150
-      const payout = (betAmount * (1 + oddsAtBet / 100)).toFixed(2);
+      // 赔付 = 净投注金额 × (1 + 赔率/100)
+      // 即: 本金 + 利润 = 净投注金额 × (1 + 赔率/100)
+      const payout = (netBetAmount * (1 + oddsAtBet / 100)).toFixed(2);
 
       // 更新投注状态和实际奖金
       await client.query(
@@ -565,6 +573,13 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
         'UPDATE users SET balance = balance + $1 WHERE id = $2',
         [payout, bet.user_id]
       );
+
+      // 详细的结算日志（包括退款信息）
+      if (refundAmount > 0) {
+        console.log(`   用户 ${bet.user_id}: 原始投注 $${betAmount}, 退款 $${refundAmount}, 净投注 $${netBetAmount}, 赔付 $${payout}`);
+      } else {
+        console.log(`   用户 ${bet.user_id}: 投注 $${betAmount}, 赔付 $${payout}`);
+      }
 
       // 结算对应的佣金
       try {

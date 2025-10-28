@@ -690,15 +690,22 @@ class UserService {
 
       const result = await client.query(
         `SELECT
-          COUNT(*) as total_bets,
-          COALESCE(SUM(bet_amount), 0) as total_bet_amount,
-          COALESCE(SUM(CASE WHEN status = 'pending' THEN bet_amount ELSE 0 END), 0) as active_bet_amount,
-          COALESCE(SUM(CASE WHEN status = 'won' THEN (actual_payout - bet_amount) ELSE 0 END), 0) as profit,
-          COALESCE(SUM(CASE WHEN status = 'lost' THEN bet_amount ELSE 0 END), 0) as loss,
-          COUNT(CASE WHEN status = 'won' THEN 1 END) as won_count,
-          COUNT(CASE WHEN status IN ('won', 'lost') THEN 1 END) as settled_count
-         FROM meme_bets
-         WHERE user_id = $1 ${timeFilter}`,
+          COUNT(DISTINCT mb.id) as total_bets,
+          COALESCE(SUM(mb.bet_amount), 0) as total_bet_amount,
+          COALESCE(SUM(CASE WHEN mb.status = 'pending' THEN mb.bet_amount - COALESCE(rr.refund_sum, 0) ELSE 0 END), 0) as active_bet_amount,
+          COALESCE(SUM(CASE WHEN mb.status = 'won' THEN (mb.actual_payout - mb.bet_amount) ELSE 0 END), 0) as profit,
+          COALESCE(SUM(CASE WHEN mb.status = 'lost' THEN mb.bet_amount ELSE 0 END), 0) as loss,
+          COUNT(CASE WHEN mb.status = 'won' THEN 1 END) as won_count,
+          COUNT(CASE WHEN mb.status IN ('won', 'lost') THEN 1 END) as settled_count
+         FROM meme_bets mb
+         LEFT JOIN (
+           SELECT bet_id, SUM(refund_amount) as refund_sum
+           FROM refund_records
+           WHERE status = 'completed'
+           GROUP BY bet_id
+         ) rr ON mb.id = rr.bet_id
+         WHERE mb.user_id = $1 ${timeFilter}
+         GROUP BY mb.user_id`,
         params
       );
 
