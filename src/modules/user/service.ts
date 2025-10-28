@@ -704,10 +704,23 @@ class UserService {
            WHERE status = 'completed'
            GROUP BY bet_id
          ) rr ON mb.id = rr.bet_id
-         WHERE mb.user_id = $1 ${timeFilter}
-         GROUP BY mb.user_id`,
+         WHERE mb.user_id = $1 ${timeFilter}`,
         params
       );
+
+      // 如果没有投注记录，返回默认值
+      if (result.rows.length === 0) {
+        return {
+          time_range: timeRange,
+          total_bets: 0,
+          total_bet_amount: '0.00',
+          active_bet_amount: '0.00',
+          profit: '0.00',
+          loss: '0.00',
+          net_profit: '0.00',
+          win_rate: '0.00',
+        };
+      }
 
       const row = result.rows[0];
 
