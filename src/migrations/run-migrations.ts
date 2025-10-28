@@ -7,6 +7,9 @@ import { up as addFuturePrice } from './006-add-future-price.js';
 import { up as addCoinIcon } from './007-add-coin-icon.js';
 import { up as addReferralSystem } from './008-referral-system.js';
 import { up as createKlineBuyRecords } from './009-create-kline-buy-records.js';
+import { up as addMatchingSlide } from './010-add-matching-slide.js';
+import { up as addPendingMatchTimeout } from './011-add-pending-match-timeout.js';
+import { up as createRefundRecords } from './012-create-refund-records.js';
 
 // 运行数据库迁移
 async function runMigrations() {
@@ -23,6 +26,9 @@ async function runMigrations() {
     await addCoinIcon();
     await addReferralSystem();
     await createKlineBuyRecords();
+    await addMatchingSlide();
+    await addPendingMatchTimeout();
+    await createRefundRecords();
 
     console.log('🎉 所有迁移已完成');
     process.exit(0);

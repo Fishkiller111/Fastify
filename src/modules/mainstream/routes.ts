@@ -126,6 +126,12 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             examples: ['10minutes', '30minutes', '5hours', '1days', '72h', '45m', '2d']
           },
           future_price: { type: 'number', description: '预测的未来价格（deadline到期前币价是否能达到此价格）' },
+          matching_slide: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 100,
+            description: '匹配滑动值(%)，创建者保留的百分比，反方需投注 initial_pool_amount × (1 - matching_slide%) 才能成功开盘，可选，默认50'
+          },
           pending_match_timeout: {
             type: 'integer',
             minimum: 1,
@@ -161,6 +167,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             total_no_bets: { type: 'number' },
             status: { type: 'string' },
             deadline: { type: 'string' },
+            matching_slide: { type: 'number' },
             pending_match_timeout: { type: 'number' },
             created_at: { type: 'string' },
             future_price: { type: 'string' },
@@ -221,6 +228,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
               total_no_bets: { type: 'number' },
               status: { type: 'string' },
               deadline: { type: 'string' },
+              matching_slide: { type: 'number' },
               created_at: { type: 'string' },
               future_price: { type: 'string', nullable: true },
               current_price: { type: 'string', nullable: true },
@@ -277,6 +285,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             total_no_bets: { type: 'number' },
             status: { type: 'string' },
             deadline: { type: 'string' },
+            matching_slide: { type: 'number' },
             created_at: { type: 'string' },
             future_price: { type: 'string', nullable: true },
             current_price: { type: 'string', nullable: true },

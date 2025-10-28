@@ -599,43 +599,54 @@ class UserService {
           bc.name as big_coin_name,
           bc.icon_url as big_coin_icon_url,
           me.future_price,
-          me.current_price
+          me.current_price,
+          COALESCE(SUM(rr.refund_amount), 0) as total_refund_amount
          FROM meme_bets mb
          INNER JOIN meme_events me ON mb.event_id = me.id
          LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
+         LEFT JOIN refund_records rr ON mb.id = rr.bet_id AND rr.status = 'completed'
          WHERE mb.user_id = $1
+         GROUP BY mb.id, me.id, bc.id
          ORDER BY mb.created_at DESC
          LIMIT $2 OFFSET $3`,
         [userId, limit, offset]
       );
 
-      return result.rows.map(row => ({
-        id: row.id,
-        event_id: row.event_id,
-        user_id: row.user_id,
-        bet_type: row.bet_type,
-        bet_amount: row.bet_amount,
-        odds_at_bet: row.odds_at_bet,
-        potential_payout: row.potential_payout,
-        actual_payout: row.actual_payout,
-        status: row.status,
-        created_at: row.created_at,
-        event: {
-          id: row.event_id,
-          type: row.type,
-          status: row.event_status,
-          contract_address: row.contract_address,
-          deadline: row.deadline,
-          settled_at: row.settled_at,
-          token_name: row.token_name,
-          big_coin_id: row.big_coin_id,
-          big_coin_symbol: row.big_coin_symbol,
-          big_coin_name: row.big_coin_name,
-          big_coin_icon_url: row.big_coin_icon_url,
-          future_price: row.future_price,
-          current_price: row.current_price,
-        }
-      }));
+      return result.rows.map(row => {
+        const betAmount = parseFloat(row.bet_amount);
+        const refundAmount = parseFloat(row.total_refund_amount);
+        const netBetAmount = betAmount - refundAmount;
+
+        return {
+          id: row.id,
+          event_id: row.event_id,
+          user_id: row.user_id,
+          bet_type: row.bet_type,
+          bet_amount: row.bet_amount,
+          refund_amount: row.total_refund_amount,
+          net_bet_amount: netBetAmount.toString(),
+          odds_at_bet: row.odds_at_bet,
+          potential_payout: row.potential_payout,
+          actual_payout: row.actual_payout,
+          status: row.status,
+          created_at: row.created_at,
+          event: {
+            id: row.event_id,
+            type: row.type,
+            status: row.event_status,
+            contract_address: row.contract_address,
+            deadline: row.deadline,
+            settled_at: row.settled_at,
+            token_name: row.token_name,
+            big_coin_id: row.big_coin_id,
+            big_coin_symbol: row.big_coin_symbol,
+            big_coin_name: row.big_coin_name,
+            big_coin_icon_url: row.big_coin_icon_url,
+            future_price: row.future_price,
+            current_price: row.current_price,
+          }
+        };
+      });
     } finally {
       client.release();
     }

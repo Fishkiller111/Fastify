@@ -173,7 +173,9 @@ Each module follows this structure:
     - Default tiers: CipherSignal (1%), ShadowTact (1.5%), MajorWin (2%), SealOracle (2.5%)
   - **commission_records**: Commission tracking with pending/settled/cancelled states
 - **Migrations**: Version-controlled schema changes with sequential numbering
-  - Latest: 009-create-kline-buy-records.ts
+  - Latest: 011-add-pending-match-timeout.ts
+  - 010: Adds `matching_slide` and `matched_amount` for matching mechanism
+  - 011: Adds `pending_match_timeout` for pending_match state timeout control
 
 ## Important Implementation Notes
 
@@ -249,7 +251,10 @@ Predict whether a meme token will successfully launch on specific platforms.
 
 #### State Machine
 Events transition: `pending_match` → `active` → `settled`
-- **pending_match**: Creator's side funded, waiting for counter-bets
+- **pending_match**: Creator's side funded, waiting for counter-bets to reach matching threshold
+  - **Timeout**: Controlled by `pending_match_timeout` field (1-604800 seconds, default 3600)
+  - **Matching Mechanism**: Event activates when counter-party reaches required investment
+  - See **MATCHING_SLIDE.md** and **PENDING_MATCH_TIMEOUT.md** for detailed specifications
 - **active**: Both sides have bets, countdown to deadline begins
 - **settled**: Result determined via DexScreener API, payouts distributed
 
@@ -344,10 +349,28 @@ API responses include `deadline_after_settlement` field:
 - For active events: returns `deadline`
 - For settled events: returns actual `settled_at` timestamp
 
-#### Matching Mechanism
-In `pending_match` state, only counter-side bets allowed:
-- Creator bets YES → only NO bets accepted
-- First counter-bet triggers state change to `active`
+#### Matching Mechanism (Matching Slide)
+The matching mechanism determines how much counter-party investment is needed before event activation.
+
+**Core Concept**: `matching_slide` represents the **percentage the creator retains**
+- Formula: `requiredCounterAmount = initialPoolAmount × (1 - matching_slide%)`
+- Example: Initial 100U, matching_slide 50% → Counter needs 50U (creator keeps 50%)
+- Example: Initial 100U, matching_slide 70% → Counter needs 30U (creator keeps 70%)
+
+**Behavior in pending_match state**:
+- Only counter-side bets allowed (creator bets YES → only NO bets accepted)
+- Each counter-bet updates `matched_amount` tracking cumulative counter investment
+- Event automatically activates when `matched_amount >= requiredCounterAmount`
+- Excess counter-bets are refunded proportionally; excess creator amount fully refunded
+
+**Documentation**: See **MATCHING_SLIDE.md** for comprehensive specification and examples
+
+#### Pending Match Timeout
+Controls how long an event can remain in `pending_match` state before automatic cancellation.
+- **Field**: `pending_match_timeout` in meme_events table (seconds)
+- **Range**: 1-604800 (1 second to 7 days), default 3600 (1 hour)
+- **Implementation**: Requires external cron job to check and cancel expired events
+- **Documentation**: See **PENDING_MATCH_TIMEOUT.md** for implementation details
 
 #### Transaction Best Practices
 **Critical Pattern**: K-line recording and WebSocket broadcasting must occur AFTER transaction commit:

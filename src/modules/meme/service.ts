@@ -300,10 +300,11 @@ function calculateOdds(yesPool: number, noPool: number) {
 
 /**
  * 用户下注 - 支持匹配滑动值机制
- * 
+ *
  * 待匹配状态(pending_match)逻辑：
  * 1. 只能下注与创建者相反的方向
- * 2. 反方投注累计需达到：initial_pool_amount × matching_slide% 才能成功开盘
+ * 2. 反方投注累计需达到：initial_pool_amount × (1 - matching_slide%) 才能成功开盘
+ *    其中 matching_slide 是创建者保留的百分比
  * 3. 若达到，多余部分返还给反方，创建者方也按比例调整
  * 4. 进入active状态，双方池子相等（公平开盘）
  */
