@@ -573,19 +573,20 @@ class UserService {
     }
   }
 
-  /**
-   * 获取用户所有下注记录(包含事件详情)
+    /**
+   * 获取用户所有下注记录(包含事件详情和退款记录)
    * 包括 meme 和 mainstream 类型的所有下注
    * @param userId 用户ID
    * @param limit 返回记录数
    * @param offset 分页偏移量
-   * @returns 用户下注记录列表
+   * @returns 用户下注记录列表（包含退款详情）
    */
   async getAllUserBets(userId: number, limit: number = 50, offset: number = 0): Promise<any[]> {
     const client = await pool.connect();
 
     try {
-      const result = await client.query(
+      // 首先获取下注记录和汇总的退款金额
+      const betsResult = await client.query(
         `SELECT
           mb.*,
           me.type,
@@ -612,41 +613,75 @@ class UserService {
         [userId, limit, offset]
       );
 
-      return result.rows.map(row => {
-        const betAmount = parseFloat(row.bet_amount);
-        const refundAmount = parseFloat(row.total_refund_amount);
-        const netBetAmount = betAmount - refundAmount;
+      // 为每个下注记录获取详细的退款记录
+      const betsWithRefunds = await Promise.all(
+        betsResult.rows.map(async (row) => {
+          const betAmount = parseFloat(row.bet_amount);
+          const refundAmount = parseFloat(row.total_refund_amount);
+          const netBetAmount = betAmount - refundAmount;
 
-        return {
-          id: row.id,
-          event_id: row.event_id,
-          user_id: row.user_id,
-          bet_type: row.bet_type,
-          bet_amount: row.bet_amount,
-          refund_amount: row.total_refund_amount,
-          net_bet_amount: netBetAmount.toString(),
-          odds_at_bet: row.odds_at_bet,
-          potential_payout: row.potential_payout,
-          actual_payout: row.actual_payout,
-          status: row.status,
-          created_at: row.created_at,
-          event: {
-            id: row.event_id,
-            type: row.type,
-            status: row.event_status,
-            contract_address: row.contract_address,
-            deadline: row.deadline,
-            settled_at: row.settled_at,
-            token_name: row.token_name,
-            big_coin_id: row.big_coin_id,
-            big_coin_symbol: row.big_coin_symbol,
-            big_coin_name: row.big_coin_name,
-            big_coin_icon_url: row.big_coin_icon_url,
-            future_price: row.future_price,
-            current_price: row.current_price,
-          }
-        };
-      });
+          // 获取该下注对应的所有退款记录
+          const refundsResult = await client.query(
+            `SELECT
+              id,
+              refund_type,
+              refund_reason,
+              refund_amount,
+              original_bet_amount,
+              status,
+              created_at,
+              updated_at
+             FROM refund_records
+             WHERE bet_id = $1 AND status = 'completed'
+             ORDER BY created_at DESC`,
+            [row.id]
+          );
+
+          const refunds = refundsResult.rows.map(refund => ({
+            id: refund.id,
+            refund_type: refund.refund_type,
+            refund_reason: refund.refund_reason,
+            refund_amount: refund.refund_amount,
+            original_bet_amount: refund.original_bet_amount,
+            status: refund.status,
+            created_at: refund.created_at,
+            updated_at: refund.updated_at,
+          }));
+
+          return {
+            id: row.id,
+            event_id: row.event_id,
+            user_id: row.user_id,
+            bet_type: row.bet_type,
+            bet_amount: row.bet_amount,
+            refund_amount: row.total_refund_amount,
+            net_bet_amount: netBetAmount.toString(),
+            odds_at_bet: row.odds_at_bet,
+            potential_payout: row.potential_payout,
+            actual_payout: row.actual_payout,
+            status: row.status,
+            created_at: row.created_at,
+            refunds: refunds,
+            event: {
+              id: row.event_id,
+              type: row.type,
+              status: row.event_status,
+              contract_address: row.contract_address,
+              deadline: row.deadline,
+              settled_at: row.settled_at,
+              token_name: row.token_name,
+              big_coin_id: row.big_coin_id,
+              big_coin_symbol: row.big_coin_symbol,
+              big_coin_name: row.big_coin_name,
+              big_coin_icon_url: row.big_coin_icon_url,
+              future_price: row.future_price,
+              current_price: row.current_price,
+            }
+          };
+        })
+      );
+
+      return betsWithRefunds;
     } finally {
       client.release();
     }

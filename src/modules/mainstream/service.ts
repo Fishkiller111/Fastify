@@ -39,11 +39,30 @@ function parseDuration(duration: string): number {
 
 /**
  * 计算deadline时间
+ * 使用 UTC 时间确保时区一致性
+ * 
+ * JavaScript 的 Date 对象内部始终使用 UTC，但我们需要确保：
+ * 1. 计算使用 UTC 时间戳
+ * 2. 数据库存储的是 UTC 时间
+ * 3. 前后端都使用 UTC 进行时间操作
+ * 
+ * @param duration 持续时间字符串 (例如: "5minutes", "1days")
+ * @returns 返回 UTC 时间的 Date 对象
  */
 function calculateDeadline(duration: string): Date {
-  const now = new Date();
+  // 使用 UTC 时间戳计算
+  const nowUtc = new Date();  // Date 对象在 JS 中始终是 UTC
   const durationMs = parseDuration(duration);
-  return new Date(now.getTime() + durationMs);
+  const deadlineUtc = new Date(nowUtc.getTime() + durationMs);
+  
+  // 确保时间是 UTC (调试用)
+  console.log(`⏰ Deadline 计算:
+    当前 UTC 时间: ${nowUtc.toISOString()}
+    Duration: ${duration} (${durationMs}ms)
+    截止 UTC 时间: ${deadlineUtc.toISOString()}
+  `);
+  
+  return deadlineUtc;
 }
 
 /**

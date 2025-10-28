@@ -139,10 +139,10 @@ async function up() {
         total_no_bets INTEGER DEFAULT 0,
         is_launched BOOLEAN DEFAULT NULL,
         status VARCHAR(20) DEFAULT 'pending_match' CHECK (status IN ('pending_match', 'active', 'settled', 'cancelled')),
-        deadline TIMESTAMP NOT NULL,
-        launch_time TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        settled_at TIMESTAMP
+        deadline TIMESTAMP WITH TIME ZONE NOT NULL,
+        launch_time TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        settled_at TIMESTAMP WITH TIME ZONE
       )
     `);
 
