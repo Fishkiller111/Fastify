@@ -18,10 +18,13 @@ export interface MemeEvent {
   contract_address?: string;
   creator_side: BetType;
   initial_pool_amount: string;
+  initial_amount: number;          // 初始amount数量 (1 amount = 0.5U, initial_amount = initial_pool_amount × 2)
   matching_slide: number;          // 匹配滑动值 1-100 (%)
   pending_match_timeout: number;   // 待匹配状态超时时间(秒)，默认3600(1小时)，范围1-604800(7天)
   yes_pool: string;
   no_pool: string;
+  yes_amount: number;              // YES方的amount数量 (yes_amount = yes_pool × 2)
+  no_amount: number;               // NO方的amount数量 (no_amount = no_pool × 2)
   yes_odds: string;
   no_odds: string;
   total_yes_bets: number;

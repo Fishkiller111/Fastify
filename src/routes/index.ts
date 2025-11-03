@@ -5,6 +5,7 @@ import adminUserRoutes from '../modules/user/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
 import klineRoutes from '../modules/kline/routes.js';
 import memeRoutes from '../modules/meme/routes.js';
+import ammRoutes from '../modules/meme/amm-routes.js';
 import mainstreamRoutes from '../modules/mainstream/routes.js';
 import referralRoutes from '../modules/referral/routes.js';
 import pumpfunRoutes from '../modules/pumpfun/routes.js';
@@ -32,6 +33,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册 Meme事件合约路由
   fastify.register(memeRoutes, { prefix: '/api/meme' });
+
+  // 注册 AMM (自动做市商) 路由
+  fastify.register(ammRoutes, { prefix: '/api/amm' });
 
   // 注册主流币事件合约路由
   fastify.register(mainstreamRoutes, { prefix: '/api/mainstream' });
