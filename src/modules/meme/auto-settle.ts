@@ -114,6 +114,77 @@ async function settleEventAuto(eventId: number, type: string, contractAddress: s
 
     console.log(`   ❌ 失败投注数: ${lostBetsResult.rows.length}`);
 
+    // === AMM系统同步：强制卖出所有持仓并记录settle交易 ===
+    console.log(`\n💰 处理AMM持仓清算...`);
+
+    // 获取该事件的所有用户持仓
+    const positionsResult = await client.query(
+      'SELECT * FROM user_positions WHERE event_id = $1',
+      [eventId]
+    );
+
+    for (const position of positionsResult.rows) {
+      const userId = position.user_id;
+      const yesAmount = parseInt(position.yes_amount);
+      const noAmount = parseInt(position.no_amount);
+
+      const yesOdds = parseFloat(event.yes_odds || 0);
+      const noOdds = parseFloat(event.no_odds || 0);
+
+      // 计算获胜方的返还金额
+      // 返还金额 = amount × (odds / 100)
+      // 例如：YES获胜，YES赔率80%，则持有100个YES amount返还 100 × 0.8 = 80U
+      let yesSettleReturn = 0;
+      let noSettleReturn = 0;
+
+      if (winnerSide === 'yes' && yesAmount > 0) {
+        // YES方获胜，计算YES持仓的返还
+        yesSettleReturn = yesAmount * (yesOdds / 100);
+      } else if (winnerSide === 'no' && noAmount > 0) {
+        // NO方获胜，计算NO持仓的返还
+        noSettleReturn = noAmount * (noOdds / 100);
+      }
+      // 失败方持仓归零，不需要额外处理
+
+      // 记录结算交易（YES方）
+      if (yesAmount > 0) {
+        await client.query(
+          `INSERT INTO transactions
+           (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+           VALUES ($1, $2, 'settle', 'yes', $3, $4, $5)`,
+          [eventId, userId, -yesAmount, yesSettleReturn, yesOdds]
+        );
+      }
+
+      // 记录结算交易（NO方）
+      if (noAmount > 0) {
+        await client.query(
+          `INSERT INTO transactions
+           (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+           VALUES ($1, $2, 'settle', 'no', $3, $4, $5)`,
+          [eventId, userId, -noAmount, noSettleReturn, noOdds]
+        );
+      }
+
+      // 计算总返还金额
+      const totalSettleReturn = yesSettleReturn + noSettleReturn;
+
+      // 更新用户持仓：将持仓金额记录到 total_returned，然后清零 amount
+      await client.query(
+        `UPDATE user_positions
+         SET yes_amount = 0,
+             no_amount = 0,
+             total_returned = total_returned + $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE event_id = $1 AND user_id = $3`,
+        [eventId, totalSettleReturn, userId]
+      );
+
+      console.log(`   📤 用户 ${userId} 持仓已清算: YES ${yesAmount} amount (${yesOdds}%), NO ${noAmount} amount (${noOdds}%), 返还 $${totalSettleReturn.toFixed(2)}`);
+    }
+
+    console.log(`   ✅ AMM持仓清算完成，共处理 ${positionsResult.rows.length} 个用户`);
+
     await client.query('COMMIT');
     console.log(`   🎉 事件 ${eventId} 结算完成！\n`);
   } catch (error: any) {

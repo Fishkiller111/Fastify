@@ -199,7 +199,7 @@ async function ammRoutes(fastify: FastifyInstance) {
   // 获取用户持仓
   fastify.get('/positions', {
     schema: {
-      description: '获取当前用户的所有持仓',
+      description: '获取当前用户的所有持仓（包含事件详情）',
       tags: ['AMM'],
       security: [{ bearerAuth: [] }],
       querystring: {
@@ -224,6 +224,34 @@ async function ammRoutes(fastify: FastifyInstance) {
               total_returned: { type: 'string' },
               created_at: { type: 'string' },
               updated_at: { type: 'string' },
+              event: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', description: '事件类型 (pumpfun/bonk/Mainstream)' },
+                  contract_address: { type: 'string' },
+                  token_name: { type: 'string', description: '代币名称' },
+                  status: { type: 'string' },
+                  yes_pool: { type: 'string' },
+                  no_pool: { type: 'string' },
+                  yes_odds: { type: 'string' },
+                  no_odds: { type: 'string' },
+                  deadline: { type: 'string' },
+                  settled_at: { type: 'string' },
+                  creator_side: { type: 'string' },
+                  big_coin: {
+                    type: 'object',
+                    description: 'Mainstream事件的币种信息',
+                    properties: {
+                      id: { type: 'number' },
+                      symbol: { type: 'string' },
+                      name: { type: 'string' },
+                      icon_url: { type: 'string' },
+                    },
+                  },
+                  future_price: { type: 'string', description: 'Mainstream事件的目标价格' },
+                  current_price: { type: 'string', description: 'Mainstream事件的当前价格' },
+                },
+              },
             },
           },
         },

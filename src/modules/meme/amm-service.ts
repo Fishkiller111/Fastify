@@ -478,25 +478,47 @@ export async function getUserPosition(
 }
 
 /**
- * 获取用户所有持仓
+ * 获取用户所有持仓（包含事件详情）
  */
 export async function getUserPositions(
   userId: number,
   limit: number = 20,
   offset: number = 0
-): Promise<UserPosition[]> {
+): Promise<any[]> {
   const client = await pool.connect();
 
   try {
     const result = await client.query(
-      `SELECT * FROM user_positions
-       WHERE user_id = $1
-       ORDER BY updated_at DESC
+      `SELECT
+         up.*,
+         me.type as event_type,
+         me.contract_address,
+         me.token_name,
+         me.status as event_status,
+         me.yes_pool,
+         me.no_pool,
+         me.yes_odds,
+         me.no_odds,
+         me.deadline,
+         me.settled_at,
+         me.creator_side,
+         me.big_coin_id,
+         me.future_price,
+         me.current_price,
+         bc.symbol as big_coin_symbol,
+         bc.name as big_coin_name,
+         bc.icon_url as big_coin_icon_url
+       FROM user_positions up
+       INNER JOIN meme_events me ON up.event_id = me.id
+       LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
+       WHERE up.user_id = $1
+       ORDER BY up.updated_at DESC
        LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
 
     return result.rows.map((row) => ({
+      // 持仓信息
       id: row.id,
       event_id: row.event_id,
       user_id: row.user_id,
@@ -506,6 +528,33 @@ export async function getUserPositions(
       total_returned: row.total_returned,
       created_at: row.created_at,
       updated_at: row.updated_at,
+
+      // 事件信息
+      event: {
+        type: row.event_type,
+        contract_address: row.contract_address,
+        token_name: row.token_name,
+        status: row.event_status,
+        yes_pool: row.yes_pool,
+        no_pool: row.no_pool,
+        yes_odds: row.yes_odds,
+        no_odds: row.no_odds,
+        deadline: row.deadline,
+        settled_at: row.settled_at,
+        creator_side: row.creator_side,
+
+        // Mainstream 专用字段
+        ...(row.event_type === 'Mainstream' && {
+          big_coin: {
+            id: row.big_coin_id,
+            symbol: row.big_coin_symbol,
+            name: row.big_coin_name,
+            icon_url: row.big_coin_icon_url,
+          },
+          future_price: row.future_price,
+          current_price: row.current_price,
+        }),
+      },
     }));
   } finally {
     client.release();
