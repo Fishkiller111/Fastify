@@ -14,6 +14,7 @@ import { up as fixTimezoneColumns } from './013-fix-timezone-columns.js';
 import { up as addFinalAmountToBets } from './014-add-final-amount-to-bets.js';
 import { up as addAmountFields } from './015-add-amount-fields.js';
 import { up as addAmmPositions } from './016-amm-positions.js';
+import { up as addRefundTransactionType } from './017-add-refund-transaction-type.js';
 
 
 // 运行数据库迁移
@@ -38,6 +39,7 @@ async function runMigrations() {
     await addFinalAmountToBets();
     await addAmountFields();
     await addAmmPositions();
+    await addRefundTransactionType();
 
     console.log('🎉 所有迁移已完成');
     process.exit(0);

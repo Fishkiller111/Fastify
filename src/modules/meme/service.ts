@@ -209,7 +209,7 @@ async function handlePendingMatchBet(
  * - Stage 3到达: 开盘，YES和NO均为init_amount (完美匹配)
  * - Stage 4超额: 开盘，YES和NO均为init_amount，超额部分全额退还给NO方
  */
-async function activateEventAfterMatching(
+export async function activateEventAfterMatching(
   client: any,
   eventId: number,
   creatorSide: string,
@@ -290,7 +290,7 @@ async function activateEventAfterMatching(
   const counterExcessPool = counterExcess * 0.5;
 
   if (counterExcessPool > 0) {
-    console.log(`💰 反方超额: ${counterExcessPool}U, 需要进行退款处理`);
+    console.log(`💰 反方超额: ${counterExcessPool}U (${counterExcess} amount), 需要进行退款处理`);
 
     // 获取反方最近的投注者，按比例退款
     const counterSide = creatorSide === 'yes' ? 'no' : 'yes';
@@ -301,14 +301,16 @@ async function activateEventAfterMatching(
       [eventId, counterSide]
     );
 
-    let remainingExcess = counterExcessPool;
+    let remainingExcessPool = counterExcessPool;
+    let remainingExcessAmount = counterExcess;
     const bets = betsResult.rows;
 
     // 从最后一个投注者开始往前退款
-    for (let i = bets.length - 1; i >= 0 && remainingExcess > 0; i--) {
+    for (let i = bets.length - 1; i >= 0 && remainingExcessPool > 0; i--) {
       const bet = bets[i];
       const betAmount = parseFloat(bet.bet_amount);
-      const refundAmount = Math.min(betAmount, remainingExcess);
+      const refundAmount = Math.min(betAmount, remainingExcessPool);
+      const refundAmountInAmount = Math.floor(refundAmount * 2);
 
       // 退款给用户
       await client.query(
@@ -320,6 +322,26 @@ async function activateEventAfterMatching(
       await client.query(
         'UPDATE meme_bets SET final_amount = final_amount - $1 WHERE id = $2',
         [refundAmount, bet.id]
+      );
+
+      // === AMM 系统同步：退款 ===
+      // 减少用户持仓的 amount 和 total_invested
+      const amountField = counterSide === 'yes' ? 'yes_amount' : 'no_amount';
+      await client.query(
+        `UPDATE user_positions
+         SET ${amountField} = ${amountField} - $1,
+             total_invested = total_invested - $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE event_id = $3 AND user_id = $4`,
+        [refundAmountInAmount, refundAmount, eventId, bet.user_id]
+      );
+
+      // 记录 AMM 退款交易
+      await client.query(
+        `INSERT INTO transactions
+         (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+         VALUES ($1, $2, 'refund', $3, $4, $5, 0)`,
+        [eventId, bet.user_id, counterSide, -refundAmountInAmount, refundAmount]
       );
 
       // 记录退款到退款记录表
@@ -338,8 +360,9 @@ async function activateEventAfterMatching(
         ]
       );
 
-      console.log(`💸 反方用户 ${bet.user_id} 获得退款: ${refundAmount}U`);
-      remainingExcess -= refundAmount;
+      console.log(`💸 反方用户 ${bet.user_id} 获得退款: ${refundAmount}U (${refundAmountInAmount} amount)`);
+      remainingExcessPool -= refundAmount;
+      remainingExcessAmount -= refundAmountInAmount;
     }
   }
 
@@ -347,7 +370,7 @@ async function activateEventAfterMatching(
   const creatorExcessPool = creatorExcess * 0.5;
 
   if (creatorExcessPool > 0) {
-    console.log(`💰 创建者超额: ${creatorExcessPool}U, 退款给创建者`);
+    console.log(`💰 创建者超额: ${creatorExcessPool}U (${creatorExcess} amount), 退款给创建者`);
 
     // 获取创建者的投注记录
     const creatorBetResult = await client.query(
@@ -371,6 +394,26 @@ async function activateEventAfterMatching(
         [creatorExcessPool, creatorBetId]
       );
 
+      // === AMM 系统同步：创建者退款 ===
+      // 减少创建者持仓的 amount 和 total_invested
+      const creatorAmountField = creatorSide === 'yes' ? 'yes_amount' : 'no_amount';
+      await client.query(
+        `UPDATE user_positions
+         SET ${creatorAmountField} = ${creatorAmountField} - $1,
+             total_invested = total_invested - $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE event_id = $3 AND user_id = $4`,
+        [creatorExcess, creatorExcessPool, eventId, creatorId]
+      );
+
+      // 记录 AMM 退款交易
+      await client.query(
+        `INSERT INTO transactions
+         (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+         VALUES ($1, $2, 'refund', $3, $4, $5, 0)`,
+        [eventId, creatorId, creatorSide, -creatorExcess, creatorExcessPool]
+      );
+
       // 记录创建者的退款
       await client.query(
         `INSERT INTO refund_records (bet_id, event_id, user_id, refund_type, refund_reason, refund_amount, original_bet_amount, status)
@@ -387,24 +430,27 @@ async function activateEventAfterMatching(
         ]
       );
 
-      console.log(`💸 创建者获得退款: ${creatorExcessPool}U`);
+      console.log(`💸 创建者获得退款: ${creatorExcessPool}U (${creatorExcess} amount)`);
     }
   }
 
-  // 3. 更新事件的 pool 和 amount 为最终值
+  // 3. 更新事件的 pool 和 amount 为最终值，并重新计算赔率
+  // 由于 yes_pool = no_pool = finalPool，赔率应该是 50:50
   await client.query(
     `UPDATE meme_events
      SET yes_pool = $1,
          no_pool = $2,
          yes_amount = $3,
          no_amount = $4,
+         yes_odds = 50.00,
+         no_odds = 50.00,
          status = 'active',
          launch_time = CURRENT_TIMESTAMP
      WHERE id = $5`,
     [finalPool, finalPool, finalAmount, finalAmount, eventId]
   );
 
-  console.log(`✅ 事件 ${eventId} 已激活，开盘成功！`);
+  console.log(`✅ 事件 ${eventId} 已激活，开盘成功！赔率重置为 50:50`);
 }
 
 /**
