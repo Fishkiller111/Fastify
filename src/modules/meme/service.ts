@@ -131,11 +131,27 @@ export async function createMemeEvent(
     const odds = calculateOdds(parseFloat(event.yes_pool), parseFloat(event.no_pool));
     const oddsAtBet = data.creator_side === 'yes' ? odds.yesOdds : odds.noOdds;
 
+    // 1. 保留旧的 meme_bets 记录（向后兼容）
     await client.query(
       `INSERT INTO meme_bets
        (event_id, user_id, bet_type, bet_amount, odds_at_bet, final_amount, status)
        VALUES ($1, $2, $3, $4, $5, $4, 'pending')`,
       [event.id, creatorId, data.creator_side, data.initial_pool_amount, oddsAtBet]
+    );
+
+    // 2. 新增 AMM 持仓记录
+    await client.query(
+      `INSERT INTO user_positions (event_id, user_id, yes_amount, no_amount, total_invested)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [event.id, creatorId, yesAmount, noAmount, data.initial_pool_amount]
+    );
+
+    // 3. 新增 AMM 交易记录
+    await client.query(
+      `INSERT INTO transactions
+       (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+       VALUES ($1, $2, 'buy', $3, $4, $5, $6)`,
+      [event.id, creatorId, data.creator_side, initialAmount, data.initial_pool_amount, oddsAtBet]
     );
 
     await client.query('COMMIT');
@@ -536,6 +552,31 @@ export async function placeBet(
 
     const betRow = betResult.rows[0];
     const betId = betRow.id;
+
+    // === AMM 系统同步 ===
+    // 更新或创建用户持仓
+    const yesAmountDelta = data.bet_type === 'yes' ? betAmountInAmount : 0;
+    const noAmountDelta = data.bet_type === 'no' ? betAmountInAmount : 0;
+
+    await client.query(
+      `INSERT INTO user_positions (event_id, user_id, yes_amount, no_amount, total_invested)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (event_id, user_id)
+       DO UPDATE SET
+         yes_amount = user_positions.yes_amount + $3,
+         no_amount = user_positions.no_amount + $4,
+         total_invested = user_positions.total_invested + $5,
+         updated_at = CURRENT_TIMESTAMP`,
+      [data.event_id, userId, yesAmountDelta, noAmountDelta, data.bet_amount]
+    );
+
+    // 创建交易记录
+    await client.query(
+      `INSERT INTO transactions
+       (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+       VALUES ($1, $2, 'buy', $3, $4, $5, $6)`,
+      [data.event_id, userId, data.bet_type, betAmountInAmount, data.bet_amount, currentOdds]
+    );
 
     // 检查是否满足匹配条件，触发激活（投注记录创建之后）- 基于 amount
     if (status === 'pending_match') {

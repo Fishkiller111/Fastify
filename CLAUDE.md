@@ -125,7 +125,15 @@ Each module follows this structure:
    - JWT plugin (`src/plugins/jwt.ts`)
    - Auth plugin (`src/plugins/auth.ts`) - must come after JWT
    - All route modules via `src/routes/index.ts`
-3. **Route Prefixes**: All API routes mounted under `/api/*` (e.g., `/api/auth`, `/api/user`, `/api/admin/users`)
+3. **Route Prefixes**: All API routes mounted under `/api/*`:
+   - `/api/auth` - Authentication endpoints
+   - `/api/user` - User profile and history
+   - `/api/admin/users` - Admin user management
+   - `/api/meme` - Meme event betting (legacy + AMM sync)
+   - `/api/amm` - AMM trading interfaces (buy/sell)
+   - `/api/mainstream` - Mainstream coin events
+   - `/api/referral` - Referral system
+   - `/api/kline` - K-line data and WebSocket
 4. **Startup Tasks**: Auto-settlement cron job starts automatically via `startAutoSettleJob()` in `src/server.ts`
 
 ### API Documentation
@@ -172,10 +180,17 @@ Each module follows this structure:
   - **commission_tiers**: Tiered commission structure based on trading volume
     - Default tiers: CipherSignal (1%), ShadowTact (1.5%), MajorWin (2%), SealOracle (2.5%)
   - **commission_records**: Commission tracking with pending/settled/cancelled states
+- **AMM System Tables** (Migration 015-016):
+  - **user_positions**: Tracks user's current holdings per event (yes_amount, no_amount, total_invested, total_returned)
+  - **transactions**: Complete transaction history (buy, sell, settle operations with amount_delta, cost_or_return)
+  - Migration 015: Adds `initial_amount`, `yes_amount`, `no_amount` fields to meme_events (1 amount = 0.5U)
+  - Migration 016: Creates AMM tables and migrates existing meme_bets data
 - **Migrations**: Version-controlled schema changes with sequential numbering
-  - Latest: 011-add-pending-match-timeout.ts
+  - Latest: 016-amm-positions.ts
   - 010: Adds `matching_slide` and `matched_amount` for matching mechanism
   - 011: Adds `pending_match_timeout` for pending_match state timeout control
+  - 015: Adds amount mechanism (initial_amount, yes_amount, no_amount)
+  - 016: AMM system refactor (user_positions, transactions tables)
 
 ## Important Implementation Notes
 
@@ -223,6 +238,11 @@ The system supports two admin role levels:
 - Run in sequence using `npm run migrate`
 - Each migration is numbered (001, 002, 003, etc.)
 - Migration runner tracks completed migrations to avoid re-execution
+- **Critical**: When adding new migrations to `src/migrations/run-migrations.ts`:
+  - Import statements MUST use `.js` extension, not `.ts`
+  - Example: `import { up as addAmountFields } from './015-add-amount-fields.js';`
+  - This is required because TypeScript compiles to ES modules and Node.js needs `.js` for module resolution
+  - Using `.ts` extension will cause runtime errors when running `npm run migrate`
 
 ### Multi-Login Strategy
 This API supports three authentication methods configured via the `config` table:
@@ -241,6 +261,137 @@ node dist/scripts/init-sms-config.js
 - Permission errors: `403 Forbidden`
 - Validation errors: `400 Bad Request`
 - Database errors: Caught in services, translated to user-friendly messages
+
+## AMM (Automated Market Maker) System
+
+This API implements a dual-interface architecture supporting both **legacy betting interfaces** and **new AMM trading interfaces**.
+
+### Dual-Write Architecture Pattern
+
+**Critical Design**: All old betting interfaces (`POST /api/meme/events`, `POST /api/meme/bets`, `POST /api/mainstream/events`, `POST /api/mainstream/bets`) now write to **both** old and new database tables simultaneously:
+
+```typescript
+// Example: Event creation writes to 3 locations
+await client.query('INSERT INTO meme_bets ...'); // 1. Old system (backward compatibility)
+await client.query('INSERT INTO user_positions ...'); // 2. New AMM holdings
+await client.query('INSERT INTO transactions ...'); // 3. New AMM transaction log
+```
+
+**Why This Matters**:
+- Old interfaces remain fully functional without frontend changes
+- New AMM interfaces (`POST /api/amm/buy`, `POST /api/amm/sell`) access same underlying data
+- Data consistency guaranteed through database transactions
+- `meme_bets` table preserved for API response format compatibility
+
+### Amount Mechanism (Migration 015)
+
+**Core Concept**: 1 amount = 0.5U (fixed relationship)
+
+**Database Fields** (in `meme_events` table):
+- `initial_amount`: Creator's initial position in amounts
+- `yes_amount`: Total YES shares outstanding
+- `no_amount`: Total NO shares outstanding
+
+**Conversion Formula**: `amount = Math.floor(pool * 2)`
+
+### Dynamic Pricing Model
+
+**Price Formula**: `1 amount price = 1 × (odds / 100)`
+
+**Examples**:
+- YES odds at 50% → 1 YES amount = 0.5U
+- YES odds at 80% → 1 YES amount = 0.8U (after more YES bets)
+- NO odds at 20% → 1 NO amount = 0.2U (inverse relationship)
+
+**Price Changes**: Odds recalculate after each transaction, causing dynamic price adjustments
+
+### New AMM Routes (`/api/amm/*`)
+
+**Calculation Endpoints** (no authentication required):
+- `POST /api/amm/calculate-buy` - Preview buy transaction (amount_to_receive, average_price, price_impact)
+- `POST /api/amm/calculate-sell` - Preview sell transaction (return_amount, average_price, price_impact)
+
+**Trading Endpoints** (require JWT authentication):
+- `POST /api/amm/buy` - Execute buy transaction (spend_amount → receive amount shares)
+- `POST /api/amm/sell` - Execute sell transaction (sell amount shares → receive U)
+
+**Position Query**:
+- `GET /api/amm/positions/:eventId` - Get user's current holdings for specific event
+
+### Database Schema
+
+**`user_positions` table**:
+```sql
+CREATE TABLE user_positions (
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER REFERENCES meme_events(id),
+  user_id INTEGER REFERENCES users(id),
+  yes_amount INTEGER DEFAULT 0,
+  no_amount INTEGER DEFAULT 0,
+  total_invested DECIMAL(36, 18),
+  total_returned DECIMAL(36, 18),
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  UNIQUE(event_id, user_id)
+)
+```
+
+**`transactions` table**:
+```sql
+CREATE TABLE transactions (
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER REFERENCES meme_events(id),
+  user_id INTEGER REFERENCES users(id),
+  transaction_type VARCHAR(10) CHECK (IN ('buy', 'sell', 'settle')),
+  side VARCHAR(3) CHECK (IN ('yes', 'no')),
+  amount_delta INTEGER,
+  cost_or_return DECIMAL(36, 18),
+  odds_at_transaction DECIMAL(5, 2),
+  created_at TIMESTAMP
+)
+```
+
+### Settlement Behavior
+
+**Automatic Force-Sell**: When event settles, system automatically sells all user holdings at final odds:
+- Winning side: Full payout based on final pool distribution
+- Losing side: Zero payout (holdings become worthless)
+- All transactions recorded with `transaction_type = 'settle'`
+
+### Integration Pattern
+
+**When modifying betting logic**:
+1. Always read `meme/service.ts` or `mainstream/service.ts` for reference patterns
+2. Maintain dual-write to `meme_bets` + `user_positions` + `transactions`
+3. Use UPSERT pattern for `user_positions`: `INSERT ... ON CONFLICT DO UPDATE`
+4. Calculate `betAmountInAmount = Math.floor(bet_amount * 2)` for amount conversions
+5. All operations must be within database transactions for atomicity
+
+**Example Pattern**:
+```typescript
+// In createMemeEvent or placeBet functions:
+const betAmountInAmount = Math.floor(data.bet_amount * 2);
+const yesAmountDelta = data.bet_type === 'yes' ? betAmountInAmount : 0;
+const noAmountDelta = data.bet_type === 'no' ? betAmountInAmount : 0;
+
+// Write to old system
+await client.query('INSERT INTO meme_bets ...');
+
+// Sync to AMM system
+await client.query(`
+  INSERT INTO user_positions (event_id, user_id, yes_amount, no_amount, total_invested)
+  VALUES ($1, $2, $3, $4, $5)
+  ON CONFLICT (event_id, user_id) DO UPDATE SET
+    yes_amount = user_positions.yes_amount + $3,
+    no_amount = user_positions.no_amount + $4,
+    total_invested = user_positions.total_invested + $5
+`, [eventId, userId, yesAmountDelta, noAmountDelta, data.bet_amount]);
+
+await client.query(`
+  INSERT INTO transactions (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
+  VALUES ($1, $2, 'buy', $3, $4, $5, $6)
+`, [eventId, userId, data.bet_type, betAmountInAmount, data.bet_amount, currentOdds]);
+```
 
 ## Prediction Market System
 

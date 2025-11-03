@@ -12,6 +12,9 @@ import { up as addPendingMatchTimeout } from './011-add-pending-match-timeout.js
 import { up as createRefundRecords } from './012-create-refund-records.js';
 import { up as fixTimezoneColumns } from './013-fix-timezone-columns.js';
 import { up as addFinalAmountToBets } from './014-add-final-amount-to-bets.js';
+import { up as addAmountFields } from './015-add-amount-fields.js';
+import { up as addAmmPositions } from './016-amm-positions.js';
+
 
 // 运行数据库迁移
 async function runMigrations() {
@@ -33,6 +36,8 @@ async function runMigrations() {
     await createRefundRecords();
     await fixTimezoneColumns();
     await addFinalAmountToBets();
+    await addAmountFields();
+    await addAmmPositions();
 
     console.log('🎉 所有迁移已完成');
     process.exit(0);
