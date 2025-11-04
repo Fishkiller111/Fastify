@@ -85,6 +85,71 @@ async function klineRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // 公共：获取事件详情（Meme/主流币 通用）
+  fastify.get('/events/:eventId/detail', {
+    schema: {
+      description: '公共：获取事件详情（同时支持 Meme 与主流币事件）。pumpfun/bonk 将返回外盘发射判定结果：is_launched 与 launch_condition。',
+      tags: ['K线'],
+      params: {
+        type: 'object',
+        required: ['eventId'],
+        properties: { eventId: { type: 'number' } },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            id: { type: 'number' },
+            creator_id: { type: 'number' },
+            type: { type: 'string' },
+            contract_address: { type: 'string', nullable: true },
+            creator_side: { type: 'string' },
+            initial_pool_amount: { type: 'string' },
+            initial_amount: { type: 'number', nullable: true },
+            matching_slide: { type: 'number', nullable: true },
+            pending_match_timeout: { type: 'number', nullable: true },
+            yes_pool: { type: 'string' },
+            no_pool: { type: 'string' },
+            yes_amount: { type: 'number', nullable: true },
+            no_amount: { type: 'number', nullable: true },
+            yes_odds: { type: 'string' },
+            no_odds: { type: 'string' },
+            total_yes_bets: { type: 'number' },
+            total_no_bets: { type: 'number' },
+            status: { type: 'string' },
+            deadline: { type: 'string' },
+            settled_at: { type: 'string', nullable: true },
+            token_name: { type: 'string', nullable: true },
+            is_launched: { type: 'boolean', nullable: true, description: 'pumpfun/bonk 专用：是否发射到外盘（判定结果）。Mainstream 为 null' },
+            launch_condition: { type: 'string', nullable: true, description: 'pumpfun/bonk 的外盘发射判断条件说明：pumpfun=pumpswap为成功/pumpfun为失败；bonk=raydium为成功/launchlab为失败' },
+            big_coin: {
+              type: 'object',
+              nullable: true,
+              properties: {
+                id: { type: 'number' },
+                symbol: { type: 'string' },
+                name: { type: 'string' },
+                chain: { type: 'string' },
+                icon_url: { type: 'string', nullable: true },
+              },
+            },
+            "Predicted Price": { type: 'string', nullable: true, description: '预测价格（原 future_price）' },
+            current_price: { type: 'string', nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { eventId } = request.params as { eventId: number };
+      const detail = await EventKlineService.getEventDetail(Number(eventId));
+      if (!detail) return reply.code(404).send({ error: '事件不存在' });
+      reply.send(detail);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 获取事件当前实时赔率
   fastify.get('/events/:eventId/current', {
     schema: {
@@ -184,6 +249,58 @@ async function klineRoutes(fastify: FastifyInstance) {
           created_at: record.created_at,
         }))
       );
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 公共：获取事件的所有买入/卖出记录
+  fastify.get('/events/:eventId/trades', {
+    schema: {
+      description: '公共：获取事件的所有买入/卖出记录（按时间倒序）',
+      tags: ['K线'],
+      params: {
+        type: 'object',
+        required: ['eventId'],
+        properties: {
+          eventId: { type: 'number' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', default: 200 },
+          offset: { type: 'number', default: 0 },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              event_id: { type: 'number' },
+              user_id: { type: 'number' },
+              username: { type: 'string' },
+              wallet_address: { type: 'string', nullable: true },
+              transaction_type: { type: 'string', enum: ['buy','sell'] },
+              side: { type: 'string', enum: ['yes','no'] },
+              amount_delta: { type: 'number' },
+              cost_or_return: { type: 'string' },
+              odds_at_transaction: { type: 'string' },
+              created_at: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { eventId } = request.params as { eventId: number };
+      const { limit = 200, offset = 0 } = request.query as any;
+      const rows = await EventKlineService.getEventTrades(Number(eventId), Number(limit), Number(offset));
+      reply.send(rows);
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

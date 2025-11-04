@@ -269,6 +269,56 @@ async function ammRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // 获取事件的持仓人列表（公共）
+  fastify.get('/event/:event_id/holders', {
+    schema: {
+      description: '获取某个事件合约的持仓人及相关信息（公共接口）',
+      tags: ['AMM'],
+      params: {
+        type: 'object',
+        required: ['event_id'],
+        properties: {
+          event_id: { type: 'number', description: '事件ID' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', default: 100 },
+          offset: { type: 'number', default: 0 },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              user_id: { type: 'number' },
+              username: { type: 'string' },
+              wallet_address: { type: 'string', nullable: true },
+              yes_amount: { type: 'number' },
+              no_amount: { type: 'number' },
+              total_invested: { type: 'string' },
+              total_returned: { type: 'string' },
+              created_at: { type: 'string' },
+              updated_at: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { event_id } = request.params as any;
+      const { limit = 100, offset = 0 } = request.query as any;
+      const holders = await AMMService.getEventHolders(Number(event_id), Number(limit), Number(offset));
+      reply.send(holders);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 获取交易历史
   fastify.get('/transactions', {
     schema: {

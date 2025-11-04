@@ -208,6 +208,59 @@ async function memeRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // 公共：获取所有用户的下注记录（仅 Meme 类型）
+  fastify.get('/bets/public', {
+    schema: {
+      description: '公共：获取所有用户的下注记录（仅 Meme 类型，排除 Mainstream）',
+      tags: ['Meme合约'],
+      querystring: {
+        type: 'object',
+        properties: {
+          event_id: { type: 'number' },
+          bet_type: { type: 'string', enum: ['yes', 'no'] },
+          status: { type: 'string', enum: ['pending', 'won', 'lost', 'refunded'] },
+          limit: { type: 'number', default: 50 },
+          offset: { type: 'number', default: 0 },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              event_id: { type: 'number' },
+              user_id: { type: 'number' },
+              username: { type: 'string' },
+              wallet_address: { type: 'string', nullable: true },
+              bet_type: { type: 'string' },
+              bet_amount: { type: 'string' },
+              odds_at_bet: { type: 'string' },
+              potential_payout: { type: 'string', nullable: true },
+              status: { type: 'string' },
+              created_at: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { event_id, bet_type, status, limit = 50, offset = 0 } = request.query as any;
+      const rows = await MemeService.getPublicMemeBets({
+        event_id: event_id ? Number(event_id) : undefined,
+        bet_type,
+        status,
+        limit: Number(limit),
+        offset: Number(offset),
+      });
+      reply.send(rows);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 获取事件列表
   fastify.get('/events', {
     schema: {

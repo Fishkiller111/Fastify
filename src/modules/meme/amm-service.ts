@@ -707,3 +707,61 @@ export async function getTransactions(
     client.release();
   }
 }
+
+/**
+ * 获取某事件的全部持仓（持仓人列表，公共接口使用）
+ */
+export async function getEventHolders(
+  eventId: number,
+  limit: number = 100,
+  offset: number = 0
+): Promise<
+  Array<{
+    user_id: number;
+    username: string;
+    wallet_address: string | null;
+    yes_amount: number;
+    no_amount: number;
+    total_invested: string;
+    total_returned: string;
+    created_at: Date;
+    updated_at: Date;
+  }>
+> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT 
+         up.user_id,
+         u.username,
+         u.wallet_address,
+         up.yes_amount,
+         up.no_amount,
+         up.total_invested,
+         up.total_returned,
+         up.created_at,
+         up.updated_at
+       FROM user_positions up
+       INNER JOIN users u ON up.user_id = u.id
+       WHERE up.event_id = $1
+         AND (up.yes_amount > 0 OR up.no_amount > 0)
+       ORDER BY (up.yes_amount + up.no_amount) DESC, up.updated_at DESC
+       LIMIT $2 OFFSET $3`,
+      [eventId, limit, offset]
+    );
+
+    return result.rows.map((row) => ({
+      user_id: row.user_id,
+      username: row.username,
+      wallet_address: row.wallet_address ?? null,
+      yes_amount: parseInt(row.yes_amount),
+      no_amount: parseInt(row.no_amount),
+      total_invested: row.total_invested,
+      total_returned: row.total_returned,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+  } finally {
+    client.release();
+  }
+}

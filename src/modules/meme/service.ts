@@ -971,6 +971,70 @@ export async function getUserBets(query: GetUserBetsQuery): Promise<any[]> {
 }
 
 /**
+ * 公共：获取所有用户的下注记录（仅限 Meme 类型，排除 Mainstream）
+ */
+export async function getPublicMemeBets(params: {
+  event_id?: number;
+  bet_type?: 'yes' | 'no';
+  status?: 'pending' | 'won' | 'lost' | 'refunded';
+  limit?: number;
+  offset?: number;
+}): Promise<any[]> {
+  const { event_id, bet_type, status, limit = 50, offset = 0 } = params;
+  const client = await pool.connect();
+
+  try {
+    const conditions: string[] = ["me.type != 'Mainstream'"];
+    const values: any[] = [];
+    let i = 1;
+
+    if (event_id) { conditions.push(`mb.event_id = $${i++}`); values.push(event_id); }
+    if (bet_type) { conditions.push(`mb.bet_type = $${i++}`); values.push(bet_type); }
+    if (status) { conditions.push(`mb.status = $${i++}`); values.push(status); }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const query = `
+      SELECT 
+        mb.id,
+        mb.event_id,
+        mb.user_id,
+        u.username,
+        u.wallet_address,
+        mb.bet_type,
+        mb.bet_amount,
+        mb.odds_at_bet,
+        mb.potential_payout,
+        mb.status,
+        mb.created_at
+      FROM meme_bets mb
+      INNER JOIN meme_events me ON mb.event_id = me.id
+      INNER JOIN users u ON mb.user_id = u.id
+      ${where}
+      ORDER BY mb.created_at DESC
+      LIMIT $${i} OFFSET $${i+1}
+    `;
+
+    const result = await client.query(query, [...values, limit, offset]);
+    return result.rows.map(r => ({
+      id: r.id,
+      event_id: r.event_id,
+      user_id: r.user_id,
+      username: r.username,
+      wallet_address: r.wallet_address,
+      bet_type: r.bet_type,
+      bet_amount: r.bet_amount,
+      odds_at_bet: r.odds_at_bet,
+      potential_payout: r.potential_payout,
+      status: r.status,
+      created_at: r.created_at,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * 删除已结算的Meme事件及其关联数据
  * 级联删除: meme_bets, klines
  */
@@ -1035,5 +1099,6 @@ export default {
   getEvents,
   getEventById,
   getUserBets,
+  getPublicMemeBets,
   deleteSettledEvents,
 };

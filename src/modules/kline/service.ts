@@ -10,6 +10,70 @@ import {
 
 class EventKlineService {
   /**
+   * 公共：获取事件详情（同时支持 Meme 与 Mainstream）
+   */
+  async getEventDetail(eventId: number): Promise<any | null> {
+    const result = await pool.query(
+      `SELECT 
+         me.*,
+         bc.symbol as big_coin_symbol,
+         bc.name as big_coin_name,
+         bc.chain as big_coin_chain,
+         bc.icon_url as big_coin_icon_url
+       FROM meme_events me
+       LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
+       WHERE me.id = $1`,
+      [eventId]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const e = result.rows[0];
+    // 针对 pumpfun/bonk 的发射判断条件描述
+    let launchCondition: string | null = null;
+    if (e.type === 'pumpfun') {
+      launchCondition = '是否发射到外盘：DexScreener 显示 pumpswap=成功，pumpfun=失败';
+    } else if (e.type === 'bonk') {
+      launchCondition = '是否发射到外盘：DexScreener 显示 raydium=成功，launchlab=失败';
+    }
+
+    return {
+      id: e.id,
+      creator_id: e.creator_id,
+      type: e.type,
+      contract_address: e.contract_address,
+      creator_side: e.creator_side,
+      initial_pool_amount: e.initial_pool_amount,
+      initial_amount: e.initial_amount ?? null,
+      matching_slide: e.matching_slide ?? null,
+      pending_match_timeout: e.pending_match_timeout ?? null,
+      yes_pool: e.yes_pool,
+      no_pool: e.no_pool,
+      yes_amount: e.yes_amount ?? null,
+      no_amount: e.no_amount ?? null,
+      yes_odds: e.yes_odds,
+      no_odds: e.no_odds,
+      total_yes_bets: e.total_yes_bets,
+      total_no_bets: e.total_no_bets,
+      status: e.status,
+      deadline: e.deadline,
+      settled_at: e.settled_at ?? null,
+      token_name: e.token_name ?? null,
+      is_launched: e.is_launched === null ? null : !!e.is_launched,
+      launch_condition: launchCondition,
+      // Mainstream 专用字段（若有）
+      big_coin: e.big_coin_id ? {
+        id: e.big_coin_id,
+        symbol: e.big_coin_symbol,
+        name: e.big_coin_name,
+        chain: e.big_coin_chain,
+        icon_url: e.big_coin_icon_url,
+      } : null,
+      ["Predicted Price"]: e.future_price ?? null,
+      current_price: e.current_price ?? null,
+    };
+  }
+  /**
    * 记录赔率快照到数据库
    */
   async recordOddsSnapshot(eventId: number): Promise<void> {
@@ -242,6 +306,57 @@ class EventKlineService {
       bet_amount: parseFloat(row.bet_amount),
       yes_odds_at_bet: parseFloat(row.yes_odds_at_bet),
       no_odds_at_bet: parseFloat(row.no_odds_at_bet),
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    }));
+  }
+  /**
+   * 公共：获取事件的所有买入/卖出记录（按时间倒序）
+   */
+  async getEventTrades(eventId: number, limit: number = 200, offset: number = 0): Promise<Array<{
+    id: number;
+    event_id: number;
+    user_id: number;
+    username: string;
+    wallet_address: string | null;
+    transaction_type: 'buy' | 'sell';
+    side: 'yes' | 'no';
+    amount_delta: number;
+    cost_or_return: string;
+    odds_at_transaction: string;
+    created_at: string;
+  }>> {
+    const result = await pool.query(
+      `SELECT 
+         t.id,
+         t.event_id,
+         t.user_id,
+         u.username,
+         u.wallet_address,
+         t.transaction_type,
+         t.side,
+         t.amount_delta,
+         t.cost_or_return,
+         t.odds_at_transaction,
+         t.created_at
+       FROM transactions t
+       INNER JOIN users u ON t.user_id = u.id
+       WHERE t.event_id = $1 AND t.transaction_type IN ('buy','sell')
+       ORDER BY t.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [eventId, limit, offset]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      event_id: row.event_id,
+      user_id: row.user_id,
+      username: row.username,
+      wallet_address: row.wallet_address ?? null,
+      transaction_type: row.transaction_type,
+      side: row.side,
+      amount_delta: parseInt(row.amount_delta),
+      cost_or_return: row.cost_or_return,
+      odds_at_transaction: row.odds_at_transaction,
       created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     }));
   }
