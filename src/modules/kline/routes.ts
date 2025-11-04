@@ -254,6 +254,79 @@ async function klineRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // 公共：主流币事件预测方向（根据预测价格与当前价格比较）
+  fastify.get('/events/:eventId/prediction-direction', {
+    schema: {
+      description: '公共：主流币事件预测方向（up/down/flat）。仅适配 Mainstream，Meme 事件不适配。',
+      tags: ['K线'],
+      params: {
+        type: 'object',
+        required: ['eventId'],
+        properties: { eventId: { type: 'number' } },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            event_id: { type: 'number' },
+            type: { type: 'string', enum: ['Mainstream'] },
+            predicted_price: { type: 'string', description: '事件设置的预测价格' },
+            current_price: { type: 'string', description: 'DexScreener 实时价格' },
+            direction: { type: 'string', enum: ['up', 'down', 'flat'], description: 'predicted vs current：高=up，低=down，相等=flat' },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { eventId } = request.params as { eventId: number };
+      const data = await EventKlineService.getPredictionDirection(Number(eventId));
+      if (!data) return reply.code(404).send({ error: '事件不存在' });
+      reply.send(data);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 公共：获取事件结束倒计时
+  fastify.get('/events/:eventId/countdown', {
+    schema: {
+      description: '公共：获取事件结束倒计时（精度毫秒，包含天/时/分/秒拆分）',
+      tags: ['K线'],
+      params: {
+        type: 'object',
+        required: ['eventId'],
+        properties: { eventId: { type: 'number' } },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            event_id: { type: 'number' },
+            status: { type: 'string', description: '事件状态 active/settled/cancelled 等' },
+            deadline: { type: 'string', description: '事件截止时间 ISO 字符串' },
+            server_time: { type: 'string', description: '服务器当前时间 ISO 字符串' },
+            ended: { type: 'boolean', description: '是否已结束（到期或非active状态）' },
+            remaining_ms: { type: 'number', description: '剩余毫秒数（最小0）' },
+            days: { type: 'number' },
+            hours: { type: 'number' },
+            minutes: { type: 'number' },
+            seconds: { type: 'number' },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { eventId } = request.params as { eventId: number };
+      const data = await EventKlineService.getEventCountdown(Number(eventId));
+      if (!data) return reply.code(404).send({ error: '事件不存在' });
+      reply.send(data);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 公共：获取事件的所有买入/卖出记录
   fastify.get('/events/:eventId/trades', {
     schema: {

@@ -1,4 +1,6 @@
 import pool from '../../config/database.js';
+import redis from '../../config/redis.js';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import {
   EventOddsKline,
   OddsSnapshot,
@@ -9,6 +11,75 @@ import {
 } from './types.js';
 
 class EventKlineService {
+  /**
+   * 从 DexScreener 获取 BSC 链上代币价格（USD）
+   */
+  private getProxyAgent(): HttpsProxyAgent<string> | undefined {
+    const proxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+    return proxy ? new HttpsProxyAgent(proxy) : undefined;
+  }
+
+  private async fetchBSCTokenPrice(contractAddress: string): Promise<number | null> {
+    try {
+      const cacheKey = `dex:price:bsc:${contractAddress.toLowerCase()}`;
+
+      // 先读缓存
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        const v = parseFloat(cached);
+        if (!isNaN(v)) return v;
+      }
+
+      const https = await import('https');
+      const url = `https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`;
+
+      const agent = this.getProxyAgent();
+      const options: any = {
+        agent,
+        headers: {
+          'user-agent': 'MemeApp/1.0 (kline-service)'
+        }
+      };
+
+      const data: string = await new Promise((resolve, reject) => {
+        const req = (https as any).get(url, options, (res: any) => {
+          let data = '';
+          res.on('data', (chunk: any) => { data += chunk; });
+          res.on('end', () => {
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(data);
+            } else {
+              reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+            }
+          });
+        });
+
+        // 超时保护（4秒）
+        req.setTimeout(4000, () => {
+          req.destroy(new Error('Request timeout'));
+        });
+
+        req.on('error', (err: any) => reject(err));
+      });
+
+      const response = JSON.parse(data);
+      if (!response.pairs || response.pairs.length === 0) return null;
+
+      const bscPairs = response.pairs.filter((pair: any) =>
+        pair.chainId === 'bsc' || pair.chainId === 'binance'
+      );
+      if (bscPairs.length === 0) return null;
+
+      const priceUsd = parseFloat(bscPairs[0].priceUsd);
+      if (isNaN(priceUsd)) return null;
+
+      // 写缓存，TTL 30 秒
+      await redis.setex(cacheKey, 30, priceUsd.toString());
+      return priceUsd;
+    } catch (e) {
+      return null;
+    }
+  }
   /**
    * 公共：获取事件详情（同时支持 Meme 与 Mainstream）
    */
@@ -359,6 +430,98 @@ class EventKlineService {
       odds_at_transaction: row.odds_at_transaction,
       created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     }));
+  }
+
+  /**
+   * 公共：主流币事件预测方向（up/down/flat）
+   * 仅适配 type=Mainstream；meme 事件不适配
+   */
+  async getPredictionDirection(eventId: number): Promise<{
+    event_id: number;
+    type: string;
+    predicted_price: string;
+    current_price: string;
+    direction: 'up' | 'down' | 'flat';
+  } | null> {
+    // 读取事件
+    const res = await pool.query(
+      `SELECT id, type, contract_address, future_price
+       FROM meme_events
+       WHERE id = $1`,
+      [eventId]
+    );
+    if (res.rows.length === 0) return null;
+
+    const ev = res.rows[0];
+    if (ev.type !== 'Mainstream') {
+      throw new Error('该接口仅适用于主流币事件');
+    }
+    if (!ev.contract_address || ev.future_price == null) {
+      throw new Error('缺少合约地址或预测价格');
+    }
+
+    const current = await this.fetchBSCTokenPrice(ev.contract_address);
+    if (current == null) {
+      throw new Error('无法获取当前代币价格');
+    }
+
+    const predicted = parseFloat(ev.future_price);
+    const direction = predicted > current ? 'up' : predicted < current ? 'down' : 'flat';
+
+    return {
+      event_id: ev.id,
+      type: ev.type,
+      predicted_price: predicted.toString(),
+      current_price: current.toString(),
+      direction,
+    };
+  }
+
+  /**
+   * 公共：获取事件结束倒计时
+   */
+  async getEventCountdown(eventId: number): Promise<{
+    event_id: number;
+    status: string;
+    deadline: string;
+    server_time: string;
+    ended: boolean;
+    remaining_ms: number;
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  } | null> {
+    const res = await pool.query(
+      'SELECT status, deadline FROM meme_events WHERE id = $1',
+      [eventId]
+    );
+
+    if (res.rows.length === 0) return null;
+
+    const row = res.rows[0];
+    const now = Date.now();
+    const deadlineMs = new Date(row.deadline).getTime();
+    const diff = Math.max(0, deadlineMs - now);
+    const ended = diff === 0 || row.status !== 'active';
+
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+
+    return {
+      event_id: eventId,
+      status: row.status,
+      deadline: new Date(row.deadline).toISOString(),
+      server_time: new Date(now).toISOString(),
+      ended,
+      remaining_ms: diff,
+      days,
+      hours,
+      minutes,
+      seconds,
+    };
   }
 }
 
