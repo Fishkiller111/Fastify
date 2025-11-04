@@ -124,8 +124,8 @@ export async function buyAmount(
     );
     const { yes_pool, no_pool } = updatedEvent.rows[0];
     const totalPool = parseFloat(yes_pool) + parseFloat(no_pool);
-    const newYesOdds = (parseFloat(no_pool) / totalPool) * 100;
-    const newNoOdds = (parseFloat(yes_pool) / totalPool) * 100;
+    const newYesOdds = (parseFloat(yes_pool) / totalPool) * 100;
+    const newNoOdds = (parseFloat(no_pool) / totalPool) * 100;
 
     await client.query(
       `UPDATE meme_events
@@ -288,8 +288,8 @@ export async function sellAmount(
     );
     const { yes_pool, no_pool } = updatedEvent.rows[0];
     const totalPool = parseFloat(yes_pool) + parseFloat(no_pool);
-    const newYesOdds = (parseFloat(no_pool) / totalPool) * 100;
-    const newNoOdds = (parseFloat(yes_pool) / totalPool) * 100;
+    const newYesOdds = (parseFloat(yes_pool) / totalPool) * 100;
+    const newNoOdds = (parseFloat(no_pool) / totalPool) * 100;
 
     await client.query(
       `UPDATE meme_events

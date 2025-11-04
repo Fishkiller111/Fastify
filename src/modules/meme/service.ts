@@ -462,9 +462,9 @@ function calculateOdds(yesPool: number, noPool: number) {
     return { yesOdds: 50, noOdds: 50 };
   }
 
-  // 赔率 = (对方池子 / 总池子) * 100
-  const yesOdds = ((noPool / totalPool) * 100).toFixed(2);
-  const noOdds = ((yesPool / totalPool) * 100).toFixed(2);
+  // 正向 AMM: 本方池子占比即本方赔率
+  const yesOdds = ((yesPool / totalPool) * 100).toFixed(2);
+  const noOdds = ((noPool / totalPool) * 100).toFixed(2);
 
   return {
     yesOdds: parseFloat(yesOdds),
@@ -758,53 +758,36 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
       [isLaunched, data.event_id]
     );
 
-    // 获取所有获胜的投注
-    const winningBets = await client.query(
-      `SELECT * FROM meme_bets
-       WHERE event_id = $1 AND bet_type = $2 AND status = $3`,
-      [data.event_id, winnerSide, 'pending']
+    // 只更新 meme_bets 状态为 won/lost，不计算赔付
+    // 所有赔付已由 AMM 持仓清算处理（settleAllPositions）
+    await client.query(
+      'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4',
+      ['won', data.event_id, winnerSide, 'pending']
     );
 
-    // 分配奖金给获胜者
-    for (const bet of winningBets.rows) {
-      const finalAmount = parseFloat(bet.final_amount);  // 使用最终注金（已扣除退款）
-      const oddsAtBet = parseFloat(bet.odds_at_bet);
-
-      // 赔付 = 最终注金 × (1 + 赔率/100)
-      // 即: 本金 + 利润 = final_amount × (1 + 赔率/100)
-      const payout = (finalAmount * (1 + oddsAtBet / 100)).toFixed(2);
-
-      // 更新投注状态和实际奖金
-      await client.query(
-        'UPDATE meme_bets SET status = $1, actual_payout = $2 WHERE id = $3',
-        ['won', payout, bet.id]
-      );
-
-      // 发放奖金给用户
-      await client.query(
-        'UPDATE users SET balance = balance + $1 WHERE id = $2',
-        [payout, bet.user_id]
-      );
-
-      // 详细的结算日志
-      console.log(`   用户 ${bet.user_id}: 最终注金 $${finalAmount}, 赔率 ${oddsAtBet}%, 赔付 $${payout}`);
-
-      // 结算对应的佣金
-      try {
-        const { ReferralService } = await import('../referral/service.js');
-        await ReferralService.settleCommission(bet.id);
-      } catch (commissionError) {
-        console.error(`佣金结算失败 (bet_id: ${bet.id}):`, commissionError);
-        // 佣金结算失败不影响主流程
-      }
-    }
-
-    // 更新失败的投注
     const loserSide = winnerSide === 'yes' ? 'no' : 'yes';
     await client.query(
       'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4',
       ['lost', data.event_id, loserSide, 'pending']
     );
+
+    console.log(`   ✅ meme_bets 状态已更新: ${winnerSide} 方获胜`);
+
+    // 结算所有获胜投注的佣金
+    const winningBets = await client.query(
+      `SELECT id FROM meme_bets
+       WHERE event_id = $1 AND bet_type = $2 AND status = $3`,
+      [data.event_id, winnerSide, 'won']
+    );
+
+    for (const bet of winningBets.rows) {
+      try {
+        const { ReferralService } = await import('../referral/service.js');
+        await ReferralService.settleCommission(bet.id);
+      } catch (commissionError) {
+        console.error(`   佣金结算失败 (bet_id: ${bet.id}):`, commissionError);
+      }
+    }
 
     await client.query('COMMIT');
   } catch (error) {

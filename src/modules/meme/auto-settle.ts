@@ -60,59 +60,20 @@ async function settleEventAuto(eventId: number, type: string, contractAddress: s
       [isLaunched, eventId]
     );
 
-    // 获取所有获胜的投注（包括计算退款后的净投注金额）
-    const winningBets = await client.query(
-      `SELECT 
-        mb.*,
-        COALESCE(SUM(rr.refund_amount), 0) as total_refund
-       FROM meme_bets mb
-       LEFT JOIN refund_records rr ON mb.id = rr.bet_id AND rr.status = 'completed'
-       WHERE mb.event_id = $1 AND mb.bet_type = $2 AND mb.status = $3
-       GROUP BY mb.id`,
-      [eventId, winnerSide, 'pending']
+    // 只更新 meme_bets 状态为 won/lost，不计算赔付
+    // 所有赔付由 AMM 持仓清算处理
+    await client.query(
+      'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4',
+      ['won', eventId, winnerSide, 'pending']
     );
 
-    console.log(`   👥 获胜投注数: ${winningBets.rows.length}`);
-
-    // 分配奖金给获胜者
-    for (const bet of winningBets.rows) {
-      const betAmount = parseFloat(bet.bet_amount);
-      const refundAmount = parseFloat(bet.total_refund || 0);
-      const netBetAmount = betAmount - refundAmount;  // 净投注金额（已扣除退款）
-      const oddsAtBet = parseFloat(bet.odds_at_bet);
-
-      // 赔付 = 净投注金额 × (1 + 赔率/100)
-      // 即: 本金 + 利润 = 净投注金额 × (1 + 赔率/100)
-      const payout = (netBetAmount * (1 + oddsAtBet / 100)).toFixed(2);
-
-      // 更新投注状态和实际奖金
-      await client.query(
-        'UPDATE meme_bets SET status = $1, actual_payout = $2 WHERE id = $3',
-        ['won', payout, bet.id]
-      );
-
-      // 发放奖金给用户
-      await client.query(
-        'UPDATE users SET balance = balance + $1 WHERE id = $2',
-        [payout, bet.user_id]
-      );
-
-      // 详细的结算日志（包括退款信息）
-      if (refundAmount > 0) {
-        console.log(`   ✅ 用户 ${bet.user_id}: 原始投注 $${betAmount}, 退款 $${refundAmount}, 净投注 $${netBetAmount}, 赔付 $${payout}`);
-      } else {
-        console.log(`   ✅ 用户 ${bet.user_id}: 投注 $${betAmount}, 赔付 $${payout}`);
-      }
-    }
-
-    // 更新失败的投注
     const loserSide = winnerSide === 'yes' ? 'no' : 'yes';
-    const lostBetsResult = await client.query(
-      'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4 RETURNING id',
+    await client.query(
+      'UPDATE meme_bets SET status = $1 WHERE event_id = $2 AND bet_type = $3 AND status = $4',
       ['lost', eventId, loserSide, 'pending']
     );
 
-    console.log(`   ❌ 失败投注数: ${lostBetsResult.rows.length}`);
+    console.log(`   ✅ meme_bets 状态已更新: ${winnerSide} 方获胜`);
 
     // === AMM系统同步：强制卖出所有持仓并记录settle交易 ===
     console.log(`\n💰 处理AMM持仓清算...`);
@@ -134,42 +95,36 @@ async function settleEventAuto(eventId: number, type: string, contractAddress: s
       // 计算获胜方的返还金额
       // 返还金额 = amount × (odds / 100)
       // 例如：YES获胜，YES赔率80%，则持有100个YES amount返还 100 × 0.8 = 80U
-      let yesSettleReturn = 0;
-      let noSettleReturn = 0;
+      let settleReturn = 0;
 
-      if (winnerSide === 'yes' && yesAmount > 0) {
-        // YES方获胜，计算YES持仓的返还
-        yesSettleReturn = yesAmount * (yesOdds / 100);
-      } else if (winnerSide === 'no' && noAmount > 0) {
-        // NO方获胜，计算NO持仓的返还
-        noSettleReturn = noAmount * (noOdds / 100);
+      // 副谜：只返还获胜的一方，也就是 winnerSide 方的持仓
+      if (winnerSide === 'yes') {
+        settleReturn = yesAmount * (yesOdds / 100);
+      } else if (winnerSide === 'no') {
+        settleReturn = noAmount * (noOdds / 100);
       }
-      // 失败方持仓归零，不需要额外处理
 
-      // 记录结算交易（YES方）
+      // 记录结算交易
+      // 覆盖之前的 amount日志
       if (yesAmount > 0) {
         await client.query(
           `INSERT INTO transactions
            (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
-           VALUES ($1, $2, 'settle', 'yes', $3, $4, $5)`,
-          [eventId, userId, -yesAmount, yesSettleReturn, yesOdds]
+           VALUES ($1, $2, 'settle', $3, $4, $5, $6)`,
+          [eventId, userId, 'yes', -yesAmount, (winnerSide === 'yes' ? settleReturn : 0), yesOdds]
         );
       }
 
-      // 记录结算交易（NO方）
       if (noAmount > 0) {
         await client.query(
           `INSERT INTO transactions
            (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
-           VALUES ($1, $2, 'settle', 'no', $3, $4, $5)`,
-          [eventId, userId, -noAmount, noSettleReturn, noOdds]
+           VALUES ($1, $2, 'settle', $3, $4, $5, $6)`,
+          [eventId, userId, 'no', -noAmount, (winnerSide === 'no' ? settleReturn : 0), noOdds]
         );
       }
 
-      // 计算总返还金额
-      const totalSettleReturn = yesSettleReturn + noSettleReturn;
-
-      // 更新用户持仓：将持仓金额记录到 total_returned，然后清零 amount
+      // 更新用户持仓
       await client.query(
         `UPDATE user_positions
          SET yes_amount = 0,
@@ -177,10 +132,18 @@ async function settleEventAuto(eventId: number, type: string, contractAddress: s
              total_returned = total_returned + $2,
              updated_at = CURRENT_TIMESTAMP
          WHERE event_id = $1 AND user_id = $3`,
-        [eventId, totalSettleReturn, userId]
+        [eventId, settleReturn, userId]
       );
 
-      console.log(`   📤 用户 ${userId} 持仓已清算: YES ${yesAmount} amount (${yesOdds}%), NO ${noAmount} amount (${noOdds}%), 返还 $${totalSettleReturn.toFixed(2)}`);
+      // 发放返还
+      if (settleReturn > 0) {
+        await client.query(
+          'UPDATE users SET balance = balance + $1 WHERE id = $2',
+          [settleReturn, userId]
+        );
+      }
+
+      console.log(`   📤 用户 ${userId} 持仓已清算: YES ${yesAmount} (${yesOdds}%) + NO ${noAmount} (${noOdds}%) = 返还 ${settleReturn.toFixed(2)}U`);
     }
 
     console.log(`   ✅ AMM持仓清算完成，共处理 ${positionsResult.rows.length} 个用户`);
