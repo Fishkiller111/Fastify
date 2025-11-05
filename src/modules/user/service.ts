@@ -823,6 +823,102 @@ class UserService {
       client.release();
     }
   }
+
+  /**
+   * 获取当前用户的退款记录
+   */
+  async getUserRefundRecords(userId: number, params: {
+    event_id?: number;
+    refund_type?: 'excess_matching' | 'event_cancelled' | 'manual' | 'other';
+    status?: 'pending' | 'completed' | 'failed';
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<any[]> {
+    const client = await pool.connect();
+    try {
+      const { event_id, refund_type, status, limit = 50, offset = 0 } = params;
+
+      const conditions: string[] = ['rr.user_id = $1'];
+      const values: any[] = [userId];
+      let i = 2;
+
+      if (event_id) { conditions.push(`rr.event_id = $${i++}`); values.push(event_id); }
+      if (refund_type) { conditions.push(`rr.refund_type = $${i++}`); values.push(refund_type); }
+      if (status) { conditions.push(`rr.status = $${i++}`); values.push(status); }
+
+      const where = `WHERE ${conditions.join(' AND ')}`;
+
+      const sql = `
+        SELECT 
+          rr.id,
+          rr.bet_id,
+          rr.event_id,
+          rr.user_id,
+          rr.refund_type,
+          rr.refund_reason,
+          rr.refund_amount,
+          rr.original_bet_amount,
+          rr.status,
+          rr.created_at,
+          rr.updated_at,
+          mb.bet_type,
+          mb.bet_amount,
+          me.type as event_type,
+          me.status as event_status,
+          me.contract_address,
+          me.token_name,
+          me.big_coin_id,
+          bc.symbol as big_coin_symbol,
+          bc.name as big_coin_name,
+          bc.icon_url as big_coin_icon_url,
+          me.future_price,
+          me.current_price
+        FROM refund_records rr
+        LEFT JOIN meme_bets mb ON rr.bet_id = mb.id
+        LEFT JOIN meme_events me ON rr.event_id = me.id
+        LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
+        ${where}
+        ORDER BY rr.created_at DESC
+        LIMIT $${i} OFFSET $${i+1}
+      `;
+
+      const result = await client.query(sql, [...values, limit, offset]);
+
+      return result.rows.map(r => ({
+        id: r.id,
+        bet_id: r.bet_id,
+        event_id: r.event_id,
+        user_id: r.user_id,
+        refund_type: r.refund_type,
+        refund_reason: r.refund_reason,
+        refund_amount: r.refund_amount,
+        original_bet_amount: r.original_bet_amount,
+        status: r.status,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        bet: r.bet_id ? {
+          bet_type: r.bet_type,
+          bet_amount: r.bet_amount,
+        } : null,
+        event: {
+          type: r.event_type,
+          status: r.event_status,
+          contract_address: r.contract_address,
+          token_name: r.token_name,
+          big_coin: r.big_coin_id ? {
+            id: r.big_coin_id,
+            symbol: r.big_coin_symbol,
+            name: r.big_coin_name,
+            icon_url: r.big_coin_icon_url,
+          } : null,
+          future_price: r.future_price,
+          current_price: r.current_price,
+        }
+      }));
+    } finally {
+      client.release();
+    }
+  }
 }
 
 export default new UserService();

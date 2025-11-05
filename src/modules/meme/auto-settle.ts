@@ -163,7 +163,7 @@ async function settleEventAuto(eventId: number, type: string, contractAddress: s
  * 1. 如果达到最低标准 → 激活事件
  * 2. 如果未达到最低标准 → 全额退款并取消事件
  */
-async function handlePendingMatchTimeout(eventId: number): Promise<void> {
+export async function handlePendingMatchTimeout(eventId: number): Promise<void> {
   const client = await pool.connect();
 
   try {
@@ -251,7 +251,7 @@ async function handlePendingMatchTimeout(eventId: number): Promise<void> {
             bet.id,
             eventId,
             bet.user_id,
-            'timeout_unmatched',
+            'event_cancelled',
             'Pending match timeout: minimum threshold not reached',
             betAmount,
             betAmount,

@@ -144,6 +144,89 @@ async function userRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // 获取当前用户的退款记录
+  fastify.get('/refunds', {
+    schema: {
+      description: '获取当前用户的退款记录（包含事件/下注信息）',
+      tags: ['用户'],
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          event_id: { type: 'number' },
+          refund_type: { type: 'string', enum: ['excess_matching', 'event_cancelled', 'manual', 'other'] },
+          status: { type: 'string', enum: ['pending', 'completed', 'failed'] },
+          limit: { type: 'number', default: 50 },
+          offset: { type: 'number', default: 0 },
+        },
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              bet_id: { type: 'number', nullable: true },
+              event_id: { type: 'number' },
+              user_id: { type: 'number' },
+              refund_type: { type: 'string' },
+              refund_reason: { type: 'string' },
+              refund_amount: { type: 'string' },
+              original_bet_amount: { type: 'string', nullable: true },
+              status: { type: 'string' },
+              created_at: { type: 'string' },
+              updated_at: { type: 'string' },
+              bet: {
+                type: 'object', nullable: true,
+                properties: {
+                  bet_type: { type: 'string' },
+                  bet_amount: { type: 'string' },
+                }
+              },
+              event: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string' },
+                  status: { type: 'string' },
+                  contract_address: { type: 'string', nullable: true },
+                  token_name: { type: 'string', nullable: true },
+                  big_coin: {
+                    type: 'object', nullable: true,
+                    properties: {
+                      id: { type: 'number' },
+                      symbol: { type: 'string' },
+                      name: { type: 'string' },
+                      icon_url: { type: 'string', nullable: true },
+                    }
+                  },
+                  future_price: { type: 'string', nullable: true },
+                  current_price: { type: 'string', nullable: true },
+                }
+              }
+            },
+          },
+        },
+      },
+    },
+    preHandler: fastify.userAuth(),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = (request as any).user.userId;
+      const { event_id, refund_type, status, limit = 50, offset = 0 } = request.query as any;
+      const rows = await UserService.getUserRefundRecords(userId, {
+        event_id: event_id ? Number(event_id) : undefined,
+        refund_type,
+        status,
+        limit: Number(limit),
+        offset: Number(offset),
+      });
+      reply.send(rows);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
   // 获取用户统计数据
   fastify.get('/statistics', {
     schema: {

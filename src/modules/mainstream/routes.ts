@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { processTimedOutPendingMatches } from '../overview/service.js';
 import {
   CreateMainstreamEventRequest,
   GetBigCoinsQuery,
@@ -242,6 +243,8 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
     },
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      // 先处理可能已超时的待匹配事件
+      await processTimedOutPendingMatches();
       const { limit = 20, offset = 0 } = request.query as any;
       const events = await MainstreamService.getMainstreamEvents(limit, offset);
       reply.send(events);
@@ -302,6 +305,8 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as any;
+      // 先处理可能已超时的待匹配事件
+      await processTimedOutPendingMatches();
       const event = await MainstreamService.getMainstreamEventById(id);
 
       if (!event) {
@@ -313,6 +318,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
       reply.code(400).send({ error: error.message });
     }
   });
+
 
   // 结算主流币事件（管理员操作）
   fastify.post('/events/settle', {

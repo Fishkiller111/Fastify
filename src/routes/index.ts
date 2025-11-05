@@ -40,6 +40,10 @@ async function registerRoutes(fastify: FastifyInstance) {
   // 注册主流币事件合约路由
   fastify.register(mainstreamRoutes, { prefix: '/api/mainstream' });
 
+  // 注册事件总览路由
+  const overviewRoutes = (await import('../modules/overview/routes.js')).default;
+  fastify.register(overviewRoutes, { prefix: '/api/overview' });
+
   // 注册邀请反佣路由
   fastify.register(referralRoutes, { prefix: '/api' });
 
