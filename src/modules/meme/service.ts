@@ -740,13 +740,13 @@ export async function settleEvent(data: SettleEventRequest): Promise<void> {
       console.log(`\n✅ 自动判断完成，发射状态: ${isLaunched ? '成功' : '失败'}`);
     }
 
+    // 确定获胜方
+    const winnerSide = isLaunched ? 'yes' : 'no';
+    
     // === AMM 结算: 强制卖出所有持仓 ===
     console.log('\n💰 AMM 结算阶段：强制卖出所有用户持仓...');
     const { settleAllPositions } = await import('./amm-service.js');
-    await settleAllPositions(client, data.event_id);
-
-    // 确定获胜方
-    const winnerSide = isLaunched ? 'yes' : 'no';
+    await settleAllPositions(client, data.event_id, winnerSide);
     const totalPool = parseFloat(event.yes_pool) + parseFloat(event.no_pool);
     const winnerPool = parseFloat(winnerSide === 'yes' ? event.yes_pool : event.no_pool);
 
@@ -809,30 +809,32 @@ export async function getEvents(query: GetEventsQuery): Promise<MemeEvent[]> {
   let paramCount = 1;
 
   // 排除 Mainstream 类型事件
-  conditions.push(`type != $${paramCount++}`);
+  conditions.push(`me.type != $${paramCount++}`);
   params.push('Mainstream');
 
   if (status) {
-    conditions.push(`status = $${paramCount++}`);
+    conditions.push(`me.status = $${paramCount++}`);
     params.push(status);
   }
 
   if (type) {
-    conditions.push(`type = $${paramCount++}`);
+    conditions.push(`me.type = $${paramCount++}`);
     params.push(type);
   }
 
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   const result = await pool.query(
-    `SELECT *,
+    `SELECT me.*,
+       u.username as creator_username,
        CASE
-         WHEN status = 'settled' AND settled_at IS NOT NULL THEN settled_at
-         ELSE deadline
+         WHEN me.status = 'settled' AND me.settled_at IS NOT NULL THEN me.settled_at
+         ELSE me.deadline
        END AS deadline_after_settlement
-     FROM meme_events
+     FROM meme_events me
+     LEFT JOIN users u ON me.creator_id = u.id
      ${whereClause}
-     ORDER BY created_at DESC
+     ORDER BY me.created_at DESC
      LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
     [...params, limit, offset]
   );

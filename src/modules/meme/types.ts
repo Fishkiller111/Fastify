@@ -14,6 +14,7 @@ export type BetStatus = 'pending' | 'won' | 'lost' | 'refunded';
 export interface MemeEvent {
   id: number;
   creator_id: number;
+  creator_username?: string;
   type: MemeEventType;
   contract_address?: string;
   creator_side: BetType;

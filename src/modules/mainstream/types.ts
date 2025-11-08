@@ -31,6 +31,7 @@ export interface CreateMainstreamEventRequest {
 export interface MainstreamEventResponse {
   id: number;
   creator_id: number;
+  creator_username?: string;
   type: MainstreamEventType;
   contract_address: string;
   big_coin_id: number;

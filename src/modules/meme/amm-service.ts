@@ -563,15 +563,17 @@ export async function getUserPositions(
 
 /**
  * 结算时强制卖出所有持仓
- * 在事件结算前调用，按当前赔率强制卖出所有用户的持仓
+ * 在事件结算前调用，按新规则结算：获胜方持仓按 1U/amount 计算
  *
  * @param client 数据库客户端 (需要在事务中调用)
  * @param eventId 事件ID
+ * @param winnerSide 获胜方 ('yes' | 'no')
  * @returns 结算的持仓数量
  */
 export async function settleAllPositions(
   client: any,
-  eventId: number
+  eventId: number,
+  winnerSide: 'yes' | 'no'
 ): Promise<number> {
   // 1. 获取事件当前赔率
   const eventResult = await client.query(
@@ -601,41 +603,46 @@ export async function settleAllPositions(
 
   // 3. 逐个结算持仓
   for (const position of positionsResult.rows) {
+    const yesAmount = parseInt(position.yes_amount);
+    const noAmount = parseInt(position.no_amount);
+    
+    // 新规则：结算时每个合约单价按1U计算
+    // 只返还获胜方的持仓
     let totalReturn = 0;
 
-    // 3.1 卖出 YES 持仓
-    if (position.yes_amount > 0) {
-      const yesReturn = calculateSellReturn(position.yes_amount, yesOdds);
+    // 3.1 处理 YES 持仓
+    if (yesAmount > 0) {
+      const yesReturn = winnerSide === 'yes' ? yesAmount * 1 : 0; // 获胜方按1U/amount，败方为0
       totalReturn += yesReturn;
 
-      // 创建卖出交易记录
+      // 创建结算交易记录
       await client.query(
         `INSERT INTO transactions
          (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
          VALUES ($1, $2, 'settle', 'yes', $3, $4, $5)`,
-        [eventId, position.user_id, -position.yes_amount, yesReturn, yesOdds]
+        [eventId, position.user_id, -yesAmount, yesReturn, yesOdds]
       );
 
       console.log(
-        `   用户 ${position.user_id}: 卖出 ${position.yes_amount} YES @ ${yesOdds}% = ${yesReturn.toFixed(4)}U`
+        `   用户 ${position.user_id}: 结算 ${yesAmount} YES @ ${yesOdds}% = ${yesReturn.toFixed(4)}U`
       );
     }
 
-    // 3.2 卖出 NO 持仓
-    if (position.no_amount > 0) {
-      const noReturn = calculateSellReturn(position.no_amount, noOdds);
+    // 3.2 处理 NO 持仓
+    if (noAmount > 0) {
+      const noReturn = winnerSide === 'no' ? noAmount * 1 : 0; // 获胜方按1U/amount，败方为0
       totalReturn += noReturn;
 
-      // 创建卖出交易记录
+      // 创建结算交易记录
       await client.query(
         `INSERT INTO transactions
          (event_id, user_id, transaction_type, side, amount_delta, cost_or_return, odds_at_transaction)
          VALUES ($1, $2, 'settle', 'no', $3, $4, $5)`,
-        [eventId, position.user_id, -position.no_amount, noReturn, noOdds]
+        [eventId, position.user_id, -noAmount, noReturn, noOdds]
       );
 
       console.log(
-        `   用户 ${position.user_id}: 卖出 ${position.no_amount} NO @ ${noOdds}% = ${noReturn.toFixed(4)}U`
+        `   用户 ${position.user_id}: 结算 ${noAmount} NO @ ${noOdds}% = ${noReturn.toFixed(4)}U`
       );
     }
 

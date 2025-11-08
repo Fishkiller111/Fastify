@@ -88,7 +88,7 @@ async function klineRoutes(fastify: FastifyInstance) {
   // 公共：获取事件详情（Meme/主流币 通用）
   fastify.get('/events/:eventId/detail', {
     schema: {
-      description: '公共：获取事件详情（同时支持 Meme 与主流币事件）。pumpfun/bonk 将返回外盘发射判定结果：is_launched 与 launch_condition。',
+      description: 'Public: Get event details (supports both Meme and Mainstream events). For pumpfun/bonk, returns external DEX launch determination: is_launched and launch_condition.',
       tags: ['K线'],
       params: {
         type: 'object',
@@ -120,8 +120,8 @@ async function klineRoutes(fastify: FastifyInstance) {
             deadline: { type: 'string' },
             settled_at: { type: 'string', nullable: true },
             token_name: { type: 'string', nullable: true },
-            is_launched: { type: 'boolean', nullable: true, description: 'pumpfun/bonk 专用：是否发射到外盘（判定结果）。Mainstream 为 null' },
-            launch_condition: { type: 'string', nullable: true, description: 'pumpfun/bonk 的外盘发射判断条件说明：pumpfun=pumpswap为成功/pumpfun为失败；bonk=raydium为成功/launchlab为失败' },
+            is_launched: { type: 'boolean', nullable: true, description: 'For pumpfun/bonk: whether launched to external DEX (determination result). null for Mainstream' },
+            launch_condition: { type: 'string', nullable: true, description: 'Launch status: "Launch successful" or "Not yet launched" for pumpfun/bonk. null if event not settled' },
             big_coin: {
               type: 'object',
               nullable: true,
@@ -374,6 +374,151 @@ async function klineRoutes(fastify: FastifyInstance) {
       const { limit = 200, offset = 0 } = request.query as any;
       const rows = await EventKlineService.getEventTrades(Number(eventId), Number(limit), Number(offset));
       reply.send(rows);
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 获取热门事件Top榜
+  fastify.get('/events/top', {
+    schema: {
+      description: '获取热门事件Top榜（根据yes_pool + no_pool总和排序，仅显示已启动的事件）',
+      tags: ['K线'],
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { 
+            type: 'number', 
+            description: '返回的事件数量，不传则使用系统配置的默认值' 
+          },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', description: '实际返回的数量限制' },
+            events: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'number' },
+                  type: { type: 'string' },
+                  contract_address: { type: 'string', nullable: true },
+                  token_name: { type: 'string', nullable: true },
+                  yes_pool: { type: 'string' },
+                  no_pool: { type: 'string' },
+                  total_pool: { type: 'number', description: 'yes_pool + no_pool总和' },
+                  yes_odds: { type: 'string' },
+                  no_odds: { type: 'string' },
+                  total_yes_bets: { type: 'number' },
+                  total_no_bets: { type: 'number' },
+                  status: { type: 'string' },
+                  deadline: { type: 'string' },
+                  created_at: { type: 'string' },
+                  big_coin: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      id: { type: 'number' },
+                      symbol: { type: 'string' },
+                      name: { type: 'string' },
+                      chain: { type: 'string' },
+                      icon_url: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = request.query as { limit?: number };
+      
+      // 如果没有传limit，则使用配置中的默认值
+      const limit = query.limit !== undefined 
+        ? Math.max(1, Math.min(100, query.limit)) // 限制在1-100之间
+        : await EventKlineService.getTopEventsLimit();
+      
+      const events = await EventKlineService.getTopEvents(limit);
+      
+      reply.send({
+        limit,
+        events,
+      });
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 获取Top榜默认显示数量配置
+  fastify.get('/settings/top-limit', {
+    schema: {
+      description: '获取热门事件Top榜默认显示数量',
+      tags: ['K线'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', description: '当前配置的Top榜默认显示数量' },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const limit = await EventKlineService.getTopEventsLimit();
+      reply.send({ limit });
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 设置Top榜默认显示数量
+  fastify.post('/settings/top-limit', {
+    schema: {
+      description: '设置热门事件Top榜默认显示数量',
+      tags: ['K线'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['limit'],
+        properties: {
+          limit: { 
+            type: 'number', 
+            minimum: 1,
+            maximum: 100,
+            description: '要设置的默认显示数量（1-100）' 
+          },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            limit: { type: 'number', description: '设置后的值' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+    preHandler: fastify.adminAuth(),
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { limit } = request.body as { limit: number };
+      
+      await EventKlineService.setTopEventsLimit(limit);
+      
+      reply.send({
+        success: true,
+        limit,
+        message: `Top榜默认显示数量已设置为 ${limit}`,
+      });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

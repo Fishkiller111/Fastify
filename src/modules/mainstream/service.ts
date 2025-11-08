@@ -611,9 +611,11 @@ export async function getMainstreamEvents(
       me.*,
       bc.symbol,
       bc.name as coin_name,
-      bc.chain
+      bc.chain,
+      u.username as creator_username
      FROM meme_events me
      INNER JOIN big_coins bc ON me.big_coin_id = bc.id
+     LEFT JOIN users u ON me.creator_id = u.id
      WHERE me.type = 'Mainstream'
      ORDER BY me.created_at DESC
      LIMIT $1 OFFSET $2`,
@@ -623,6 +625,7 @@ export async function getMainstreamEvents(
   return result.rows.map((row) => ({
     id: row.id,
     creator_id: row.creator_id,
+    creator_username: row.creator_username,
     type: row.type,
     contract_address: row.contract_address,
     big_coin_id: row.big_coin_id,
@@ -1093,14 +1096,15 @@ export async function settleMainstreamEvent(eventId: number): Promise<void> {
       const noOdds = parseFloat(event.no_odds || 0);
 
       // 计算获胜方的返还金额
-      // 返还金额 = amount × (odds / 100)
+      // 新规则：结算时每个合约单价按1U计算
+      // 返还金额 = 获胜方持有的 amount × 1U
       let settleReturn = 0;
 
       // 只返还获胜的一方
       if (winnerSide === 'yes') {
-        settleReturn = yesAmount * (yesOdds / 100);
+        settleReturn = yesAmount * 1; // 单价固定为 1U
       } else if (winnerSide === 'no') {
-        settleReturn = noAmount * (noOdds / 100);
+        settleReturn = noAmount * 1; // 单价固定为 1U
       }
 
       // 记录结算交易

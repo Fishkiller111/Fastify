@@ -211,6 +211,7 @@ async function mainstreamRoutes(fastify: FastifyInstance) {
             properties: {
               id: { type: 'number' },
               creator_id: { type: 'number' },
+              creator_username: { type: 'string', nullable: true },
               type: { type: 'string' },
               contract_address: { type: 'string' },
               big_coin_id: { type: 'number' },

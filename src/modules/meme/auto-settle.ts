@@ -93,15 +93,16 @@ async function settleEventAuto(eventId: number, type: string, contractAddress: s
       const noOdds = parseFloat(event.no_odds || 0);
 
       // 计算获胜方的返还金额
-      // 返还金额 = amount × (odds / 100)
-      // 例如：YES获胜，YES赔率80%，则持有100个YES amount返还 100 × 0.8 = 80U
+      // 新规则：结算时每个合约单价按1U计算
+      // 返还金额 = 获胜方持有的 amount × 1U
+      // 例如：YES获胜，持有100个YES amount，返还 100 × 1 = 100U
       let settleReturn = 0;
 
-      // 副谜：只返还获胜的一方，也就是 winnerSide 方的持仓
+      // 只返还获胜的一方，也就是 winnerSide 方的持仓
       if (winnerSide === 'yes') {
-        settleReturn = yesAmount * (yesOdds / 100);
+        settleReturn = yesAmount * 1; // 单价固定为 1U
       } else if (winnerSide === 'no') {
-        settleReturn = noAmount * (noOdds / 100);
+        settleReturn = noAmount * 1; // 单价固定为 1U
       }
 
       // 记录结算交易

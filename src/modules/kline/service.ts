@@ -100,12 +100,15 @@ class EventKlineService {
     if (result.rows.length === 0) return null;
 
     const e = result.rows[0];
-    // 针对 pumpfun/bonk 的发射判断条件描述
+    // Launch condition description for pumpfun/bonk
     let launchCondition: string | null = null;
-    if (e.type === 'pumpfun') {
-      launchCondition = '是否发射到外盘：DexScreener 显示 pumpswap=成功，pumpfun=失败';
-    } else if (e.type === 'bonk') {
-      launchCondition = '是否发射到外盘：DexScreener 显示 raydium=成功，launchlab=失败';
+    if (e.type === 'pumpfun' || e.type === 'bonk') {
+      if (e.is_launched === true) {
+        launchCondition = 'Launch successful';
+      } else if (e.is_launched === false) {
+        launchCondition = 'Not yet launched';
+      }
+      // is_launched 为 null 时，launchCondition 保持 null（事件未结算）
     }
 
     return {
@@ -522,6 +525,124 @@ class EventKlineService {
       minutes,
       seconds,
     };
+  }
+
+  /**
+   * 获取热门事件Top榜（根据yes_pool + no_pool总和排序）
+   * @param limit 返回的事件数量
+   * @returns 热门事件列表
+   */
+  async getTopEvents(limit: number): Promise<Array<{
+    id: number;
+    type: string;
+    contract_address: string | null;
+    token_name: string | null;
+    yes_pool: string;
+    no_pool: string;
+    total_pool: number;
+    yes_odds: string;
+    no_odds: string;
+    total_yes_bets: number;
+    total_no_bets: number;
+    status: string;
+    deadline: string;
+    created_at: string;
+    big_coin?: {
+      id: number;
+      symbol: string;
+      name: string;
+      chain: string;
+      icon_url: string | null;
+    };
+  }>> {
+    const result = await pool.query(
+      `SELECT 
+         me.id,
+         me.type,
+         me.contract_address,
+         me.token_name,
+         me.yes_pool,
+         me.no_pool,
+         (CAST(me.yes_pool AS NUMERIC) + CAST(me.no_pool AS NUMERIC)) as total_pool,
+         me.yes_odds,
+         me.no_odds,
+         me.total_yes_bets,
+         me.total_no_bets,
+         me.status,
+         me.deadline,
+         me.created_at,
+         bc.id as big_coin_id,
+         bc.symbol as big_coin_symbol,
+         bc.name as big_coin_name,
+         bc.chain as big_coin_chain,
+         bc.icon_url as big_coin_icon_url
+       FROM meme_events me
+       LEFT JOIN big_coins bc ON me.big_coin_id = bc.id
+       WHERE me.status = 'active'
+       ORDER BY total_pool DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    return result.rows.map(row => ({
+      id: row.id,
+      type: row.type,
+      contract_address: row.contract_address,
+      token_name: row.token_name,
+      yes_pool: row.yes_pool,
+      no_pool: row.no_pool,
+      total_pool: parseFloat(row.total_pool),
+      yes_odds: row.yes_odds,
+      no_odds: row.no_odds,
+      total_yes_bets: row.total_yes_bets,
+      total_no_bets: row.total_no_bets,
+      status: row.status,
+      deadline: row.deadline instanceof Date ? row.deadline.toISOString() : row.deadline,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+      ...(row.big_coin_id ? {
+        big_coin: {
+          id: row.big_coin_id,
+          symbol: row.big_coin_symbol,
+          name: row.big_coin_name,
+          chain: row.big_coin_chain,
+          icon_url: row.big_coin_icon_url,
+        }
+      } : {})
+    }));
+  }
+
+  /**
+   * 从配置中获取Top榜显示数量，默认为10
+   */
+  async getTopEventsLimit(): Promise<number> {
+    const result = await pool.query(
+      'SELECT value FROM config WHERE key = $1',
+      ['top_events_limit']
+    );
+    
+    if (result.rows.length === 0) {
+      return 10; // 默认值
+    }
+    
+    const value = parseInt(result.rows[0].value);
+    return isNaN(value) || value <= 0 ? 10 : value;
+  }
+
+  /**
+   * 设置Top榜显示数量
+   */
+  async setTopEventsLimit(limit: number): Promise<void> {
+    if (limit <= 0) {
+      throw new Error('Top榜数量必须大于0');
+    }
+    
+    await pool.query(
+      `INSERT INTO config (key, value, description)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (key)
+       DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+      ['top_events_limit', limit.toString(), '热门事件Top榜显示数量']
+    );
   }
 }
 
