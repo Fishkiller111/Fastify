@@ -54,6 +54,24 @@ interface SolanaConfig {
   rpcEndpoint: string;
 }
 
+// 支付网关配置接口（BEpusdt 等）
+interface PaymentGatewayConfig {
+  // 支付网关基础地址，例如 http://127.0.0.1:8080
+  baseUrl: string;
+  // 签名使用的 auth_token（conf.toml 中配置的密钥）
+  authToken: string;
+  // 默认交易类型，例如 usdt.trc20
+  defaultTradeType: string;
+  // 异步回调通知地址（BEpusdt 回调你后端的地址）
+  notifyUrl: string;
+  // 支付完成后前端跳转的基础地址，例如 https://example.com/pay/result
+  redirectBaseUrl: string;
+  // 订单默认超时时间（秒）
+  defaultTimeoutSeconds: number;
+  // 默认汇率配置，可为空，例如 "7.4"、"~1.02" 等
+  defaultRate: string;
+}
+
 // 加密配置接口
 interface EncryptionConfig {
   enabled: boolean;
@@ -67,6 +85,7 @@ interface AppConfig {
   jwt: JWTConfig;
   redis: RedisConfig;
   solana: SolanaConfig;
+  paymentGateway: PaymentGatewayConfig;
   encryption: EncryptionConfig;
 }
 
@@ -96,6 +115,17 @@ const config: AppConfig = {
   solana: {
     rpcEndpoint: process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com',
   },
+  paymentGateway: {
+    baseUrl: process.env.PAYMENT_GATEWAY_BASE_URL || 'http://127.0.0.1:8080',
+    authToken: process.env.PAYMENT_GATEWAY_AUTH_TOKEN || '',
+    defaultTradeType: process.env.PAYMENT_GATEWAY_TRADE_TYPE || 'usdt.trc20',
+    notifyUrl: process.env.PAYMENT_NOTIFY_URL || '',
+    redirectBaseUrl:
+      process.env.PAYMENT_REDIRECT_BASE_URL ||
+      (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/pay/result` : ''),
+    defaultTimeoutSeconds: parseInt(process.env.PAYMENT_TIMEOUT || '600', 10),
+    defaultRate: process.env.PAYMENT_RATE || '',
+  },
   encryption: {
     enabled: process.env.ENABLE_ENCRYPTION === 'true' || nodeEnv === 'production',
     secret: process.env.ENCRYPTION_SECRET || 'coinfun-security-key-2024-v1',
@@ -103,4 +133,13 @@ const config: AppConfig = {
 };
 
 export default config;
-export type { DatabaseConfig, ServerConfig, JWTConfig, RedisConfig, SolanaConfig, EncryptionConfig, AppConfig };
+export type {
+  DatabaseConfig,
+  ServerConfig,
+  JWTConfig,
+  RedisConfig,
+  SolanaConfig,
+  PaymentGatewayConfig,
+  EncryptionConfig,
+  AppConfig,
+};

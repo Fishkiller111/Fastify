@@ -9,6 +9,7 @@ import ammRoutes from '../modules/meme/amm-routes.js';
 import mainstreamRoutes from '../modules/mainstream/routes.js';
 import referralRoutes from '../modules/referral/routes.js';
 import pumpfunRoutes from '../modules/pumpfun/routes.js';
+import orderRoutes from '../modules/order/routes.js';
 import { klineWebSocketRoute } from '../modules/kline/websocket.js';
 
 /**
@@ -46,6 +47,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册邀请反佣路由
   fastify.register(referralRoutes, { prefix: '/api' });
+
+  // 注册充值订单路由
+  fastify.register(orderRoutes, { prefix: '/api/order' });
 
   // 注册 PumpFun 代币创建路由
   fastify.register(pumpfunRoutes, { prefix: '/api/pumpfun' });
