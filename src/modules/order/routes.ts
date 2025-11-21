@@ -231,4 +231,68 @@ export default async function orderRoutes(fastify: FastifyInstance) {
       }
     },
   );
+
+  /**
+   * 取消充值订单
+   * 前端：POST /api/order/cancel
+   */
+  fastify.post(
+    '/cancel',
+    {
+      preHandler: (fastify as any).userAuth(),
+      schema: {
+        description: '取消当前用户的未支付充值订单（本地标记为 cancelled，并调用支付网关取消交易）',
+        tags: ['Order', 'Recharge'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['order_id'],
+          properties: {
+            order_id: { type: 'string', description: '商户订单号（本地生成的 order_id）' },
+          },
+        },
+        response: {
+          200: {
+            description: '取消成功，返回订单当前状态',
+            type: 'object',
+            properties: {
+              order_id: { type: 'string' },
+              trade_id: { type: 'string', nullable: true },
+              status: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (request as any).user.userId as number;
+        const { order_id } = (request.body as any) ?? {};
+
+        if (!order_id) {
+          return reply.code(400).send({
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'order_id 为必填参数',
+          });
+        }
+
+        const result = await OrderService.cancelOrder(userId, String(order_id));
+        return reply.code(200).send(result);
+      } catch (error: any) {
+        console.error('取消充值订单失败:', error);
+
+        const message = error?.message || '取消充值订单失败';
+        let statusCode = 400;
+        if (message === 'ORDER_NOT_FOUND') statusCode = 404;
+        else if (message === 'FORBIDDEN') statusCode = 403;
+
+        return reply.code(statusCode).send({
+          statusCode,
+          error: statusCode === 403 ? 'Forbidden' : 'Bad Request',
+          message,
+        });
+      }
+    },
+  );
 }

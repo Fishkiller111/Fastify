@@ -1,6 +1,6 @@
 import pool from '../../config/database.js';
 import config from '../../config/index.js';
-import { createGatewayTransaction, signGatewayParams } from '../../utils/payment-gateway.js';
+import { createGatewayTransaction, signGatewayParams, cancelGatewayTransaction } from '../../utils/payment-gateway.js';
 import type {
   CreateRechargeOrderRequest,
   CreateRechargeOrderResponse,
@@ -8,6 +8,7 @@ import type {
   OrderStatus,
   OrderStatusResponse,
   PaymentOrder,
+  CancelOrderResponse,
 } from './types.js';
 
 /**
@@ -202,8 +203,10 @@ class OrderService {
           newStatus = 'pending_onchain';
         }
       } else if (gatewayStatus === 2) {
-        // 支付成功：幂等处理，只有非 paid 才入账
-        if (order.status !== 'paid') {
+        // 支付成功：幂等处理，已 paid 或已 cancelled 的订单不再变更
+        if (order.status === 'paid' || order.status === 'cancelled') {
+          // 已处理或已取消，忽略本次回调
+        } else {
           // 业务上：入账金额按照本地订单的金额（amount_cny）计算
           const delta = Number(order.amount_cny);
           if (!Number.isFinite(delta) || delta <= 0) {
@@ -218,8 +221,8 @@ class OrderService {
           newStatus = 'paid';
         }
       } else if (gatewayStatus === 3) {
-        // 订单超时：若尚未支付，则标记为 expired
-        if (order.status !== 'paid') {
+        // 订单超时：若尚未支付且未取消，则标记为 expired
+        if (order.status !== 'paid' && order.status !== 'cancelled') {
           newStatus = 'expired';
         }
       }
@@ -245,6 +248,91 @@ class OrderService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * 取消充值订单：仅允许未支付/未超时订单，标记为 cancelled，并调用支付网关取消交易（如果存在 trade_id）
+   */
+  async cancelOrder(userId: number, orderId: string): Promise<CancelOrderResponse> {
+    const client = await pool.connect();
+    let order: {
+      id: number;
+      user_id: number;
+      order_id: string;
+      trade_id: string | null;
+      status: OrderStatus;
+    } | null = null;
+
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query<any>(
+        `SELECT id, user_id, order_id, trade_id, status
+         FROM payment_orders
+         WHERE order_id = $1
+         FOR UPDATE`,
+        [orderId],
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('ORDER_NOT_FOUND');
+      }
+
+      const row = result.rows[0] as {
+        id: number;
+        user_id: number;
+        order_id: string;
+        trade_id: string | null;
+        status: OrderStatus;
+      };
+
+      if (row.user_id !== userId) {
+        throw new Error('FORBIDDEN');
+      }
+
+      if (row.status === 'paid') {
+        throw new Error('ORDER_ALREADY_PAID');
+      }
+      if (row.status === 'expired') {
+        throw new Error('ORDER_EXPIRED');
+      }
+      if (row.status === 'cancelled') {
+        throw new Error('ORDER_ALREADY_CANCELLED');
+      }
+
+      await client.query(
+        `UPDATE payment_orders
+         SET status = $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        ['cancelled', row.id],
+      );
+
+      order = row;
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    // 提交本地事务后，再调用支付网关取消接口（避免长事务）
+    try {
+      if (order?.trade_id) {
+        await cancelGatewayTransaction(order.trade_id);
+      }
+    } catch (error: any) {
+      console.error('调用支付网关取消交易失败:', error?.message || error);
+      // 不抛出，让本地取消结果生效
+    }
+
+    return {
+      order_id: order!.order_id,
+      trade_id: order!.trade_id,
+      status: 'cancelled',
+    };
   }
 
   /**

@@ -112,33 +112,49 @@ function userAuth(requiredPermissions?: string[]): preHandlerHookHandler {
  */
 function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
   return async (request: FastifyRequest, reply: FastifyReply) => {
+    // 判断是否是 AdminJS 页面请求，用于决定是否跳转到 /admin-login
+    const url = (request.raw as any)?.url || request.url || '';
+    const accept = request.headers.accept || '';
+    const isAdminPage = url.startsWith('/admin');
+    const wantsHtml = !accept || accept.includes('text/html');
+
+    const redirectToAdminLogin = () => {
+      if (isAdminPage && wantsHtml) {
+        // 未登录或登录过期时，访问 /admin 直接跳转到后台登录页
+        return reply.redirect('/admin-login', 302);
+      }
+      return null;
+    };
+
     try {
       console.log('=== 管理员 JWT Authentication Started ===');
       console.log('Authorization header:', request.headers.authorization);
 
-      // 检查Authorization头是否存在
-      if (!request.headers.authorization) {
-        console.error('No Authorization header found');
+      // 优先从 Authorization 头读取 Bearer token，其次从 admin_token Cookie 读取
+      const authHeader = request.headers.authorization;
+      let token: string | null = null;
+
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      } else {
+        const cookies = (request as any).cookies;
+        if (cookies && typeof cookies.admin_token === 'string' && cookies.admin_token.length > 0) {
+          token = cookies.admin_token;
+        }
+      }
+
+      if (!token) {
+        console.error('No admin token found in Authorization header or cookies');
+        const redirect = redirectToAdminLogin();
+        if (redirect) return redirect;
         return reply.code(401).send({
           statusCode: 401,
           error: 'Unauthorized',
-          message: 'Missing authorization header'
+          message: 'Missing admin token'
         });
       }
 
-      // 检查Bearer格式
-      if (!request.headers.authorization.startsWith('Bearer ')) {
-        console.error('Invalid authorization header format');
-        return reply.code(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Invalid authorization header format'
-        });
-      }
-
-      // 提取token
-      const token = request.headers.authorization.substring(7);
-      console.log('Extracted token:', token);
+      console.log('Extracted admin token:', token);
 
       // 手动验证JWT token
       const decoded = jwt.verify(token, config.jwt.secret) as JwtUser;
@@ -158,6 +174,8 @@ function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
       const user = await UserService.getSafeUserById(decoded.userId);
       if (!user || user.status !== 'active') {
         console.error('User not found or inactive');
+        const redirect = redirectToAdminLogin();
+        if (redirect) return redirect;
         return reply.code(401).send({
           statusCode: 401,
           error: 'Unauthorized',
@@ -168,6 +186,9 @@ function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
       // 检查是否为管理员或超级管理员
       if (user.role !== 'admin' && user.role !== 'super_admin') {
         console.error('User is not an admin or super_admin');
+        // 角色不对也可以当作需要重新登录处理
+        const redirect = redirectToAdminLogin();
+        if (redirect) return redirect;
         return reply.code(403).send({
           statusCode: 403,
           error: 'Forbidden',
@@ -211,6 +232,8 @@ function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
         name: err?.name,
         message: err?.message
       });
+      const redirect = redirectToAdminLogin();
+      if (redirect) return redirect;
       return reply.code(401).send({
         statusCode: 401,
         error: 'Unauthorized',

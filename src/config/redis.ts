@@ -6,12 +6,13 @@ import Redis from 'ioredis';
 import config from './index.js';
 
 // 创建 Redis 客户端
-const redis = new Redis({
+const RedisCtor: any = Redis as any;
+const redis = new RedisCtor({
   host: config.redis.host,
   port: config.redis.port,
   password: config.redis.password || undefined,
   db: config.redis.db,
-  retryStrategy(times) {
+  retryStrategy(times: number) {
     const delay = Math.min(times * 50, 2000);
     return delay;
   },
@@ -22,7 +23,7 @@ redis.on('connect', () => {
   console.log('✅ Redis 连接成功');
 });
 
-redis.on('error', (err) => {
+redis.on('error', (err: Error) => {
   console.error('❌ Redis 连接错误:', err.message);
 });
 

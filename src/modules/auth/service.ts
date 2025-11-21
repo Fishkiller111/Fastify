@@ -293,6 +293,77 @@ class AuthService {
       client.release();
     }
   }
+
+  /**
+   * 管理员登录（仅通过钱包地址，必须是 super_admin）
+   */
+  async loginAdminWithWallet(walletAddress: string): Promise<{ user: User; token: string }> {
+    if (!walletAddress) {
+      throw new Error('钱包地址不能为空');
+    }
+
+    const normalizedAddress = walletAddress.toLowerCase();
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingResult = await client.query('SELECT * FROM users WHERE wallet_address = $1', [normalizedAddress]);
+
+      if (existingResult.rows.length === 0) {
+        throw new Error('管理员不存在');
+      }
+
+      const row = existingResult.rows[0];
+
+      const role = row.role || 'user';
+      if (role !== 'super_admin') {
+        throw new Error('无权限访问后台');
+      }
+
+      // 更新最后登录时间
+      const updateResult = await client.query(
+        `UPDATE users
+         SET last_login_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING *`,
+        [row.id]
+      );
+
+      const updated = updateResult.rows[0];
+
+      const user: User = {
+        id: updated.id,
+        username: updated.username,
+        email: updated.email,
+        password: updated.password,
+        phone_number: updated.phone_number,
+        wallet_address: updated.wallet_address,
+        balance: updated.balance,
+        role: updated.role || 'super_admin',
+        permissions: updated.permissions || ['user_access'],
+        status: updated.status || 'active',
+        last_login_at: updated.last_login_at,
+        created_at: updated.created_at,
+        updated_at: updated.updated_at,
+      };
+
+      const token = jwt.sign(
+        { userId: user.id, username: user.username, role: user.role },
+        config.jwt.secret,
+        { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
+      );
+
+      await client.query('COMMIT');
+
+      return { user, token };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   
   /**
    * 根据当前配置的登录方式注册用户

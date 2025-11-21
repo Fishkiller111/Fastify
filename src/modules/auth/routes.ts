@@ -356,10 +356,10 @@ async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // 管理员登录接口（与普通登录功能相同，仅用于区分）
+  // 管理员登录接口（邮箱+密码）
   fastify.post('/admin/login', {
     schema: {
-      description: '管理员登录',
+      description: '管理员登录（邮箱+密码）',
       tags: ['管理员认证'],
       body: {
         type: 'object',
@@ -402,7 +402,7 @@ async function authRoutes(fastify: FastifyInstance) {
       const { user, token } = await AuthService.loginWithEmail(request.body);
 
       // 验证用户是否为管理员
-      if (user.role !== 'admin') {
+      if (user.role !== 'admin' && user.role !== 'super_admin') {
         return reply.code(403).send({
           statusCode: 403,
           error: 'Forbidden',
@@ -411,6 +411,65 @@ async function authRoutes(fastify: FastifyInstance) {
       }
 
       reply.send({ user, token });
+    } catch (error: any) {
+      reply.code(400).send({ error: error.message });
+    }
+  });
+
+  // 管理员登录接口（钱包地址，仅 super_admin）
+  fastify.post('/admin/login/wallet', {
+    schema: {
+      description: '管理员登录（钱包方式，仅 super_admin 可用）',
+      tags: ['管理员认证'],
+      body: {
+        type: 'object',
+        required: ['walletAddress'],
+        properties: {
+          walletAddress: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'number' },
+                username: { type: 'string' },
+                email: { type: 'string' },
+                phone_number: { type: 'string', nullable: true },
+                wallet_address: { type: 'string', nullable: true },
+                balance: { type: 'string', nullable: true },
+                role: { type: 'string' },
+                permissions: {
+                  type: 'array',
+                  items: { type: 'string' }
+                },
+                status: { type: 'string' },
+                created_at: { type: 'string' },
+                updated_at: { type: 'string' }
+              }
+            },
+            token: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request: FastifyRequest<{ Body: WalletLoginRequest }>, reply: FastifyReply) => {
+    try {
+      const { walletAddress } = request.body;
+      const { user, token } = await AuthService.loginAdminWithWallet(walletAddress);
+
+      // 设置 admin_token Cookie，供后台 /admin 使用
+      reply
+        .setCookie('admin_token', token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/admin',
+          secure: process.env.NODE_ENV === 'production'
+        })
+        .send({ user, token });
     } catch (error: any) {
       reply.code(400).send({ error: error.message });
     }

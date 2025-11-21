@@ -32,6 +32,21 @@ export interface GatewayCreateTransactionResponse {
   request_id: string;
 }
 
+// 取消交易请求参数（对应 BEpusdt cancel-transaction 接口）
+export interface GatewayCancelTransactionParams {
+  trade_id: string;
+}
+
+// 取消交易响应
+export interface GatewayCancelTransactionResponse {
+  status_code: number;
+  message: string;
+  data: {
+    trade_id: string;
+  };
+  request_id: string;
+}
+
 /**
  * 根据 docs/api.md 规则生成签名
  */
@@ -122,6 +137,52 @@ export async function createGatewayTransaction(
 
   if (json.status_code !== 200) {
     throw new Error(`支付网关返回错误: ${json.message || json.status_code}`);
+  }
+
+  return json.data;
+}
+
+/**
+ * 调用 BEpusdt 的 /api/v1/order/cancel-transaction 接口，取消指定 trade_id 的订单
+ */
+export async function cancelGatewayTransaction(
+  tradeId: string,
+): Promise<{ trade_id: string }> {
+  const gatewayConfig = config.paymentGateway;
+
+  if (!gatewayConfig.baseUrl) {
+    throw new Error('支付网关基础地址未配置，请设置 PAYMENT_GATEWAY_BASE_URL');
+  }
+  if (!gatewayConfig.authToken) {
+    throw new Error('支付网关 auth_token 未配置，请设置 PAYMENT_GATEWAY_AUTH_TOKEN');
+  }
+
+  const body: Record<string, any> = {
+    trade_id: tradeId,
+  };
+
+  // 生成签名
+  body.signature = signGatewayParams(body, gatewayConfig.authToken);
+
+  const url = new URL('/api/v1/order/cancel-transaction', gatewayConfig.baseUrl).toString();
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`调用支付网关取消失败: HTTP ${response.status} ${response.statusText} ${text}`);
+  }
+
+  const json = (await response.json()) as GatewayCancelTransactionResponse;
+
+  if (json.status_code !== 200) {
+    throw new Error(`支付网关取消返回错误: ${json.message || json.status_code}`);
   }
 
   return json.data;

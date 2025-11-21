@@ -5,6 +5,8 @@ import authPlugin from './plugins/auth.js';
 import encryptionPlugin from './plugins/encryption.js';
 import registerRoutes from './routes/index.js';
 import { startAutoSettleJob } from './modules/meme/auto-settle.js';
+import adminPanelPlugin from './admin/index.js';
+import adminLoginPageRoutes from './admin/login-page.js';
 
 // 创建Fastify实例
 const app = fastify({ logger: true });
@@ -26,6 +28,15 @@ await app.register(import('@fastify/cors'), {
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Upgrade', 'Connection'],
   credentials: true
+});
+
+// 注册 Cookie 插件（用于管理员后台 admin_token 等）
+await app.register(import('@fastify/cookie'), {
+  secret: config.jwt.secret,
+  parseOptions: {
+    sameSite: 'lax',
+    httpOnly: true
+  }
 });
 
 // 注册Swagger插件
@@ -71,6 +82,12 @@ await app.register(authPlugin);
 // 注册加密插件 (必须在路由注册之前)
 await app.register(encryptionPlugin);
 
+// 注册后台登录页面（黑金主题，钱包地址登录）
+await app.register(adminLoginPageRoutes);
+
+// 注册 Admin 后台面板（依赖 auth 插件提供的 adminAuth）
+await app.register(adminPanelPlugin);
+
 // 注册路由
 await app.register(registerRoutes);
 
@@ -83,8 +100,11 @@ app.get('/', async () => {
 const start = async () => {
   try {
     await app.listen({ port: config.server.port, host: config.server.host });
-    console.log(`服务器运行在 http://${config.server.host}:${config.server.port}`);
-    console.log(`API文档地址: http://${config.server.host}:${config.server.port}/docs`);
+    const baseUrl = `http://${config.server.host}:${config.server.port}`;
+    console.log(`服务器运行在 ${baseUrl}`);
+    console.log(`API文档地址: ${baseUrl}/docs`);
+    console.log(`后台登录地址: ${baseUrl}/admin-login`);
+    console.log(`后台管理地址: ${baseUrl}/admin`);
     
     // 启动自动结算定时任务
     startAutoSettleJob();

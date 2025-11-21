@@ -81,3 +81,10 @@ export interface OrderStatusResponse {
   created_at: string;
   updated_at: string;
 }
+
+// 取消订单响应
+export interface CancelOrderResponse {
+  order_id: string;
+  trade_id: string | null;
+  status: OrderStatus;
+}
