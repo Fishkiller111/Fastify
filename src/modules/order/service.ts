@@ -72,7 +72,8 @@ class OrderService {
       // 1. 生成本地订单号并写入本地订单表（初始状态：unpaid）
       const orderId = this.generateOrderId();
       const tradeType = payload.trade_type || gatewayConfig.defaultTradeType;
-      const timeoutSeconds = payload.timeout || gatewayConfig.defaultTimeoutSeconds;
+      // 统一使用配置中的 PAYMENT_TIMEOUT 作为订单有效期
+      const timeoutSeconds = gatewayConfig.defaultTimeoutSeconds;
 
       const insertResult = await client.query<PaymentOrder>(
         `INSERT INTO payment_orders (
@@ -121,7 +122,7 @@ class OrderService {
           gatewayData.payment_url,
           gatewayData.actual_amount,
           gatewayData.token,
-          gatewayData.expiration_time,
+          timeoutSeconds,
           newStatus,
           localOrder.id,
         ],
@@ -130,13 +131,15 @@ class OrderService {
       await client.query('COMMIT');
 
       // 4. 返回给前端的数据（包含 payment_url）
+      // 在业务语义上：amount = 充值金额（例如 100 USDC），actual_amount 同 amount
+      // expiration_time 以本地配置 PAYMENT_TIMEOUT 为准
       const response: CreateRechargeOrderResponse = {
         order_id: gatewayData.order_id,
         trade_id: gatewayData.trade_id,
-        amount: gatewayData.amount,
-        actual_amount: gatewayData.actual_amount,
+        amount: amountString,
+        actual_amount: amountString,
         payment_url: gatewayData.payment_url,
-        expiration_time: gatewayData.expiration_time,
+        expiration_time: timeoutSeconds,
         status: newStatus,
       };
 
@@ -201,12 +204,12 @@ class OrderService {
       } else if (gatewayStatus === 2) {
         // 支付成功：幂等处理，只有非 paid 才入账
         if (order.status !== 'paid') {
-          const delta = Number(payload.actual_amount);
+          // 业务上：入账金额按照本地订单的金额（amount_cny）计算
+          const delta = Number(order.amount_cny);
           if (!Number.isFinite(delta) || delta <= 0) {
             throw new Error('INVALID_ACTUAL_AMOUNT');
           }
 
-          // 为用户入账（单位：与业务余额一致，这里以 actual_amount 为准）
           await client.query(
             'UPDATE users SET balance = balance + $1 WHERE id = $2',
             [delta, order.user_id],
@@ -285,7 +288,8 @@ class OrderService {
         order_id: row.order_id,
         trade_id: row.trade_id,
         amount_cny: String(row.amount_cny),
-        actual_amount: row.actual_amount !== null ? String(row.actual_amount) : null,
+        // 业务上将 actual_amount 与充值金额对齐，方便前端直接展示充值额度
+        actual_amount: String(row.amount_cny),
         status: row.status as OrderStatus,
         payment_url: row.payment_url,
         timeout_seconds: row.timeout_seconds,

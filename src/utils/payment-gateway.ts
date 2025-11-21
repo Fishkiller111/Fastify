@@ -96,11 +96,9 @@ export async function createGatewayTransaction(
     timeout: params.timeout || gatewayConfig.defaultTimeoutSeconds,
   };
 
-  // 只有在配置了默认汇率或手动传入时才携带 rate
-  const rate = params.rate ?? gatewayConfig.defaultRate;
-  if (rate && rate.trim() !== '') {
-    body.rate = rate;
-  }
+  // 业务需要：每个订单固定使用汇率 1（即 1 CNY 对应 1 单位计价），忽略网关默认汇率配置
+  const rate = params.rate ?? '1';
+  body.rate = rate;
 
   // 生成签名
   body.signature = signGatewayParams(body, gatewayConfig.authToken);
