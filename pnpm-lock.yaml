@@ -17,6 +17,9 @@ importers:
       '@alicloud/pop-core':
         specifier: ^1.8.0
         version: 1.8.0
+      '@babel/plugin-syntax-import-assertions':
+        specifier: ^7.26.0
+        version: 7.27.1(@babel/core@7.28.5)
       '@fastify/cookie':
         specifier: ^10.0.0
         version: 10.0.1

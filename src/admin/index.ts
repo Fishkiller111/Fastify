@@ -4,9 +4,33 @@ import AdminJSFastify from '@adminjs/fastify';
 import Adapter, { Database, Resource } from '@adminjs/sql';
 import config from '../config/index.js';
 import pool from '../config/database.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
+async function ensureAdminJsEntryFile() {
+  try {
+    const projectRoot = process.cwd();
+    const adminDir = path.join(projectRoot, '.adminjs');
+    const entryPath = path.join(adminDir, 'entry.js');
+
+    await fs.mkdir(adminDir, { recursive: true });
+
+    try {
+      await fs.access(entryPath);
+    } catch {
+      // 如果 entry.js 不存在，则创建一个最简单的入口，避免 AdminJS bundler 在构建时报错
+      await fs.writeFile(entryPath, 'AdminJS.UserComponents = {}\n', 'utf8');
+      console.log('Created default AdminJS entry file at', entryPath);
+    }
+  } catch (error) {
+    console.error('Failed to ensure .adminjs/entry.js:', error);
+  }
+}
 
 // Admin 面板插件（单实例，使用 AdminJS 原生样式与默认语言）
 async function adminPanelPlugin(fastify: FastifyInstance) {
+  // 确保 .adminjs/entry.js 存在（在 Docker 等环境下首次启动可能缺失）
+  await ensureAdminJsEntryFile();
   // 注册 SQL 适配器
   AdminJS.registerAdapter({ Database, Resource });
 
@@ -28,7 +52,8 @@ async function adminPanelPlugin(fastify: FastifyInstance) {
     {
       resource: db.table('users'),
       options: {
-        navigation: { name: '用户管理', icon: 'User' },
+        // 使用英文导航名称，避免在某些生产环境编码异常显示乱码
+        navigation: { name: 'Users', icon: 'User' },
         icon: 'User',
         properties: {
           password: { isVisible: false },
@@ -90,7 +115,7 @@ async function adminPanelPlugin(fastify: FastifyInstance) {
     {
       resource: db.table('commission_tiers'),
       options: {
-        navigation: { name: '返佣配置', icon: 'Settings' },
+        navigation: { name: 'Commission Tiers', icon: 'Settings' },
         icon: 'Settings',
         listProperties: ['id', 'tier_name', 'volume', 'commission_rate', 'tier_order', 'is_active'],
         sort: {
@@ -103,7 +128,7 @@ async function adminPanelPlugin(fastify: FastifyInstance) {
     {
       resource: db.table('payment_orders'),
       options: {
-        navigation: { name: '资金与订单', icon: 'CurrencyDollar' },
+        navigation: { name: 'Funds & Orders', icon: 'CurrencyDollar' },
         icon: 'CurrencyDollar',
         actions: {
           new: { isAccessible: false },
@@ -146,7 +171,7 @@ async function adminPanelPlugin(fastify: FastifyInstance) {
     {
       resource: db.table('big_coins'),
       options: {
-        navigation: { name: '合约管理', icon: 'Database' },
+        navigation: { name: 'Contracts', icon: 'Database' },
         icon: 'Database',
         listProperties: ['id', 'symbol', 'name', 'contract_address', 'chain', 'is_active'],
       },
@@ -154,7 +179,7 @@ async function adminPanelPlugin(fastify: FastifyInstance) {
     {
       resource: db.table('meme_events'),
       options: {
-        navigation: { name: '合约管理', icon: 'DocumentSearch' },
+        navigation: { name: 'Contract Events', icon: 'DocumentSearch' },
         icon: 'DocumentSearch',
         listProperties: [
           'id',
@@ -237,7 +262,7 @@ async function adminPanelPlugin(fastify: FastifyInstance) {
     {
       resource: db.table('meme_bets'),
       options: {
-        navigation: { name: '合约管理', icon: 'DocumentCheck' },
+        navigation: { name: 'Contract Bets', icon: 'DocumentCheck' },
         icon: 'DocumentCheck',
         listProperties: [
           'id',

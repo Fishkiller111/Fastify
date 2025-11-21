@@ -54,6 +54,7 @@
     "@adminjs/fastify": "^4.2.0",
     "@adminjs/sql": "^2.2.6",
     "@alicloud/pop-core": "^1.8.0",
+    "@babel/plugin-syntax-import-assertions": "^7.26.0",
     "@fastify/cookie": "^10.0.0",
     "@fastify/cors": "^11.1.0",
     "@fastify/jwt": "^10.0.0",

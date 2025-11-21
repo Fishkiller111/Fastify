@@ -462,12 +462,13 @@ async function authRoutes(fastify: FastifyInstance) {
       const { user, token } = await AuthService.loginAdminWithWallet(walletAddress);
 
       // 设置 admin_token Cookie，供后台 /admin 使用
+      // 注意：不强制使用 secure 标记，以兼容未开启 HTTPS 的生产环境
+      // 如果后续上线 HTTPS，可改为根据配置或协议动态开启 secure
       reply
         .setCookie('admin_token', token, {
           httpOnly: true,
           sameSite: 'lax',
           path: '/admin',
-          secure: process.env.NODE_ENV === 'production'
         })
         .send({ user, token });
     } catch (error: any) {

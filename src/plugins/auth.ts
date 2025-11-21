@@ -129,6 +129,7 @@ function adminAuth(requiredPermissions: string[] = []): preHandlerHookHandler {
     try {
       console.log('=== 管理员 JWT Authentication Started ===');
       console.log('Authorization header:', request.headers.authorization);
+      console.log('Admin cookies:', (request as any).cookies);
 
       // 优先从 Authorization 头读取 Bearer token，其次从 admin_token Cookie 读取
       const authHeader = request.headers.authorization;
