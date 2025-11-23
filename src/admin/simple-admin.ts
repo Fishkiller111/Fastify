@@ -24,6 +24,17 @@ async function simpleAdminPanelPlugin(fastify: FastifyInstance) {
   const adminOptions: any = {
     rootPath: '/admin',
     resources: [
+      // 系统配置（包含提现抽成配置 withdraw_fee_rate_percent 等）
+      {
+        resource: db.table('config'),
+        options: {
+          navigation: { name: '系统设置', icon: 'Settings' },
+          icon: 'Settings',
+          listProperties: ['id', 'key', 'value', 'description', 'updated_at'],
+          editProperties: ['key', 'value', 'description'],
+          filterProperties: ['key'],
+        },
+      },
       // 用户表：用户管理、余额、角色等（导航名称保留中文，其余显示用 AdminJS 默认英文）
       {
         resource: db.table('users'),

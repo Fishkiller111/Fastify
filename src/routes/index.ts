@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import authRoutes from '../modules/auth/routes.js';
 import userRoutes from '../modules/user/routes.js';
 import adminUserRoutes from '../modules/user/admin-routes.js';
+import withdrawAdminRoutes from '../modules/withdraw/admin-routes.js';
 import verificationRoutes from '../modules/verification/routes.js';
 import klineRoutes from '../modules/kline/routes.js';
 import memeRoutes from '../modules/meme/routes.js';
@@ -10,6 +11,7 @@ import mainstreamRoutes from '../modules/mainstream/routes.js';
 import referralRoutes from '../modules/referral/routes.js';
 import pumpfunRoutes from '../modules/pumpfun/routes.js';
 import orderRoutes from '../modules/order/routes.js';
+import withdrawRoutes from '../modules/withdraw/routes.js';
 import { klineWebSocketRoute } from '../modules/kline/websocket.js';
 
 /**
@@ -25,6 +27,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册管理端用户管理路由
   fastify.register(adminUserRoutes, { prefix: '/api/admin/users' });
+
+  // 注册提现配置管理路由（管理端）
+  fastify.register(withdrawAdminRoutes, { prefix: '/api/admin/withdraw' });
 
   // 注册验证码路由
   fastify.register(verificationRoutes, { prefix: '/api/verification' });
@@ -50,6 +55,9 @@ async function registerRoutes(fastify: FastifyInstance) {
 
   // 注册充值订单路由
   fastify.register(orderRoutes, { prefix: '/api/order' });
+
+  // 注册提现路由（商户用户侧封装，内部调用 BEpusdt 提现接口）
+  fastify.register(withdrawRoutes, { prefix: '/api/user/withdraw' });
 
   // 注册 PumpFun 代币创建路由
   fastify.register(pumpfunRoutes, { prefix: '/api/pumpfun' });

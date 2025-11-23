@@ -62,7 +62,7 @@ interface PaymentGatewayConfig {
   authToken: string;
   // 默认交易类型，例如 usdt.trc20
   defaultTradeType: string;
-  // 异步回调通知地址（BEpusdt 回调你后端的地址）
+  // 异步回调通知地址（BEpusdt 支付回调你后端的地址）
   notifyUrl: string;
   // 支付完成后前端跳转的基础地址，例如 https://example.com/pay/result
   redirectBaseUrl: string;
@@ -70,6 +70,20 @@ interface PaymentGatewayConfig {
   defaultTimeoutSeconds: number;
   // 默认汇率配置，可为空，例如 "7.4"、"~1.02" 等
   defaultRate: string;
+}
+
+// 提现网关配置接口（BEpusdt 提现模块）
+interface WithdrawGatewayConfig {
+  // 提现网关基础地址，通常与支付网关相同
+  baseUrl: string;
+  // 提现签名使用的 auth_token（缺省时回退到支付网关的 authToken）
+  authToken: string;
+  // 默认提现代币类型，例如 usdt.polygon
+  defaultTradeType: string;
+  // 提现结果回调地址（BEpusdt 提现 notify_url）
+  notifyUrl: string;
+  // 提现订单默认超时时间（秒）
+  defaultTimeoutSeconds: number;
 }
 
 // 加密配置接口
@@ -86,6 +100,7 @@ interface AppConfig {
   redis: RedisConfig;
   solana: SolanaConfig;
   paymentGateway: PaymentGatewayConfig;
+  withdrawGateway: WithdrawGatewayConfig;
   encryption: EncryptionConfig;
 }
 
@@ -126,6 +141,25 @@ const config: AppConfig = {
     defaultTimeoutSeconds: parseInt(process.env.PAYMENT_TIMEOUT || '600', 10),
     defaultRate: process.env.PAYMENT_RATE || '',
   },
+  withdrawGateway: {
+    baseUrl:
+      process.env.WITHDRAW_GATEWAY_BASE_URL ||
+      process.env.PAYMENT_GATEWAY_BASE_URL ||
+      'http://127.0.0.1:8080',
+    authToken:
+      process.env.WITHDRAW_GATEWAY_AUTH_TOKEN ||
+      process.env.PAYMENT_GATEWAY_AUTH_TOKEN ||
+      '',
+    defaultTradeType:
+      process.env.WITHDRAW_TRADE_TYPE ||
+      process.env.PAYMENT_GATEWAY_TRADE_TYPE ||
+      'usdt.trc20',
+    notifyUrl: process.env.WITHDRAW_NOTIFY_URL || '',
+    defaultTimeoutSeconds: parseInt(
+      process.env.WITHDRAW_TIMEOUT || process.env.PAYMENT_TIMEOUT || '1800',
+      10,
+    ),
+  },
   encryption: {
     enabled: process.env.ENABLE_ENCRYPTION === 'true' || nodeEnv === 'production',
     secret: process.env.ENCRYPTION_SECRET || 'coinfun-security-key-2024-v1',
@@ -140,6 +174,7 @@ export type {
   RedisConfig,
   SolanaConfig,
   PaymentGatewayConfig,
+  WithdrawGatewayConfig,
   EncryptionConfig,
   AppConfig,
 };

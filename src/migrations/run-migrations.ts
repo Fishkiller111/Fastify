@@ -16,6 +16,8 @@ import { up as addAmountFields } from './015-add-amount-fields.js';
 import { up as addAmmPositions } from './016-amm-positions.js';
 import { up as addRefundTransactionType } from './017-add-refund-transaction-type.js';
 import { up as createPaymentOrders } from './018-create-payment-orders.js';
+import { up as createWithdrawOrders } from './019-create-withdraw-orders.js';
+import { up as addWithdrawFeeFields } from './020-add-withdraw-fee.js';
 
 
 // 运行数据库迁移
@@ -42,6 +44,8 @@ async function runMigrations() {
     await addAmmPositions();
     await addRefundTransactionType();
     await createPaymentOrders();
+    await createWithdrawOrders();
+    await addWithdrawFeeFields();
 
     console.log('🎉 所有迁移已完成');
     process.exit(0);
